@@ -4,7 +4,28 @@
 #include "base_renderer.h"
 #include "../vk_engine.h"
 
-struct GroundTruthRenderer : public BaseRenderer
+struct OceanVertex {
+	glm::vec3 position;
+	glm::vec2 uv;
+};
+
+struct OceanSurface {
+	std::vector<OceanVertex> vertices;
+	std::vector<uint32_t> indices;
+	AllocatedImage displacement_map;
+
+	uint32_t grid_dimensions = 1024;
+	uint32_t texture_dimensions = 512;
+
+	AllocatedImage spectrum_texture;
+	AllocatedImage temp_texture;
+	AllocatedImage inital_spectrum_texture;
+	AllocatedImage spectrum_texture;
+	AllocatedImage normal_map;
+	AllocatedImage ping_phase_texture;
+	AllocatedImage pong_phase_texture;
+};
+struct FFTRenderer : public BaseRenderer
 {
 	void Init(VulkanEngine* engine) override;
 
@@ -22,7 +43,7 @@ struct GroundTruthRenderer : public BaseRenderer
 	void DrawBackground(VkCommandBuffer cmd);
 	void DrawPostProcess(VkCommandBuffer cmd);
 	void DrawImgui(VkCommandBuffer cmd, VkImageView targetImageView);
-	void BuildBVHStructure();
+	void BuildOceanMesh();
 
 	void ConfigureRenderWindow();
 	void InitEngine();
@@ -45,11 +66,10 @@ struct GroundTruthRenderer : public BaseRenderer
 	static void FramebufferResizeCallback(GLFWwindow* window, int width, int height);
 
 private:
+	OceanSurface surface;
 	DrawContext drawCommands;
 	DrawContext skyDrawCommands;
 
-	VkDescriptorSetLayout trace_descriptor_layout;
-	VkDescriptorSetLayout post_process_descriptor_layout;
 	VkDescriptorSetLayout skybox_descriptor_layout;
 
 	Camera main_camera;
@@ -85,11 +105,11 @@ private:
 	struct {
 		float lastFrame;
 	} delta;
-	VkExtent2D _windowExtent{ 1920,1080 };
+	VkExtent2D _windowExtent{ 1280,720 };
 	float bloom_filter_radius = 0.005f;
 	float bloom_strength = 0.08f;
-	float _aspect_width = 1920;
-	float _aspect_height = 1080;
+	float _aspect_width = 1280;
+	float _aspect_height = 720;
 
 	DeletionQueue _mainDeletionQueue;
 	AllocatedImage _drawImage;
@@ -107,8 +127,13 @@ private:
 	VkPipeline gradient_pipeline;
 	VkPipelineLayout gradient_pipeline_layout;
 
+	PipelineStateObject fft_horizontal_pso;
+	PipelineStateObject fft_vertical_pso;
+	PipelineStateObject normal_caluclation_pso;
+	PipelineStateObject initial_spectrum_pso;
+	PipelineStateObject spectrum_pso;
+	PipelineStateObject phase_pso;
 	PipelineStateObject trace_rays_pso;
-
 	GPUSceneData scene_data;
 
 	AllocatedImage white_image;
@@ -116,11 +141,8 @@ private:
 	AllocatedImage grey_image;
 	AllocatedImage storage_image;
 	AllocatedImage errorCheckerboardImage;
-
 	AllocatedImage _skyImage;
-	ktxVulkanTexture _skyBoxImage;
 
-	std::unordered_map<std::string, std::shared_ptr<LoadedGLTF>> loadedScenes;
 	VkSampler defaultSamplerLinear;
 	VkSampler defaultSamplerNearest;
 	VkSampler cubeMapSampler;
@@ -130,16 +152,8 @@ private:
 
 	//lights
 	DirectionalLight directLight;
-	uint32_t maxLights = 100;
-
-	struct PointLightData {
-
-		uint32_t numOfLights = 6;
-		std::vector<PointLight> pointLights;
-
-	}pointData;
-
 	std::string assets_path;
+
 };
 
 #endif

@@ -3,7 +3,6 @@
 #include "vk_engine.h"
 #include "vk_initializers.h"
 #include "vk_images.h"
-#include <ktx.h>
 #include <print>
 
 void ShadowPipelineResources::build_pipelines(VulkanEngine* engine, PipelineCreationInfo& info)

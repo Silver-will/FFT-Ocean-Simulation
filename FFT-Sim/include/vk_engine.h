@@ -15,7 +15,6 @@
 #include <chrono>
 #include "scene_manager.h"
 #include "resource_manager.h"
-#include <ktxvulkan.h>
 
 struct FrameData {
 

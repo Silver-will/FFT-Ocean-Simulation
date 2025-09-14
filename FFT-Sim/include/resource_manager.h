@@ -1,15 +1,13 @@
 #pragma once
 
 
-#include <fastgltf/core.hpp>
-#include <fastgltf/types.hpp>
-#include <fastgltf/tools.hpp>
 #include "vk_initializers.h"
 #include "vk_pipelines.h"
 #include "vk_types.h"
 #include "vk_images.h"
 #include "vk_loader.h"
 #include <glm/gtx/quaternion.hpp>
+#include <string_view>
 
 #include <string>
 
@@ -24,8 +22,6 @@ struct ResourceManager
 	void init(VulkanEngine* engine_ptr);
 
 	//Gltf loading functions
-	std::optional<std::shared_ptr<LoadedGLTF>> loadGltf(VulkanEngine* engine, std::string_view filePath, bool isPBRMaterial = false);
-	std::optional<AllocatedImage> load_image(VulkanEngine* engine, fastgltf::Asset& asset, fastgltf::Image& image, const std::string& rootPath);
 	
 	//Bindless helper functions
 	void write_material_array();
@@ -38,14 +34,13 @@ struct ResourceManager
 	//Resource management
 	AllocatedBuffer CreateBuffer(size_t allocSize, VkBufferUsageFlags usage, VmaMemoryUsage memoryUsage);
 	void DestroyBuffer(const AllocatedBuffer& buffer);
+	std::optional<AllocatedImage> LoadImage(std::string_view filePath, VkFormat format = VK_FORMAT_R8G8B8A8_UNORM)
 	AllocatedBuffer CreateAndUpload(size_t allocSize, VkBufferUsageFlags usage, VmaMemoryUsage memoryUsage, void* data);
 	AllocatedImage CreateImage(VkExtent3D size, VkFormat format, VkImageUsageFlags usage, bool mipmapped = false);
 	AllocatedImage CreateImage(void* data, VkExtent3D size, VkFormat format, VkImageUsageFlags usage, bool mipmapped = false);
 	GPUMeshBuffers UploadMesh(std::span<uint32_t> indices, std::span<Vertex> vertices);
 	AllocatedImage CreateImageEmpty(VkExtent3D size, VkFormat format, VkImageUsageFlags usage, VkImageViewType viewType, bool mipmapped, int layers, VkSampleCountFlagBits msaaSamples = VK_SAMPLE_COUNT_1_BIT, int mipLevels = -1);
 	void DestroyImage(const AllocatedImage& img);
-	VkSamplerMipmapMode extract_mipmap_mode(fastgltf::Filter filter);
-	VkFilter extract_filter(fastgltf::Filter filter);
 	MaterialInstance SetMaterialProperties(const vkutil::MaterialPass pass, int mat_index);
 
 	DeletionQueue deletionQueue;

@@ -1,4 +1,4 @@
-#include "ground_truth_renderer.h"
+#include "fft_renderer.h"
 #include "../vk_device.h"
 #include "../graphics.h"
 #include "../UI.h"
@@ -9,8 +9,6 @@
 #include <thread>
 #include <print>
 #include <random>
-
-#include <Tracy.hpp>
 
 #include <string>
 #include <glm/glm.hpp>
@@ -25,7 +23,7 @@ using namespace std::literals::string_literals;
 #define M_PI       3.14159265358979323846
 
 
-void GroundTruthRenderer::Init(VulkanEngine* engine)
+void FFTRenderer::Init(VulkanEngine* engine)
 {
 	assert(engine != nullptr);
 	this->engine = engine;
@@ -52,12 +50,12 @@ void GroundTruthRenderer::Init(VulkanEngine* engine)
 
 	InitImgui();
 
-	LoadAssets();
+	BuildOceanMesh();
 
 	_isInitialized = true;
 }
 
-void GroundTruthRenderer::ConfigureRenderWindow()
+void FFTRenderer::ConfigureRenderWindow()
 {
 
 	glfwSetWindowUserPointer(engine->window, this);
@@ -68,21 +66,21 @@ void GroundTruthRenderer::ConfigureRenderWindow()
 }
 
 
-void GroundTruthRenderer::KeyCallback(GLFWwindow* window, int key, int scancode, int action, int mods)
+void FFTRenderer::KeyCallback(GLFWwindow* window, int key, int scancode, int action, int mods)
 {
-	auto app = reinterpret_cast<GroundTruthRenderer*>(glfwGetWindowUserPointer(window));
+	auto app = reinterpret_cast<FFTRenderer*>(glfwGetWindowUserPointer(window));
 	app->main_camera.processKeyInput(window, key, action);
 }
 
-void GroundTruthRenderer::CursorCallback(GLFWwindow* window, double xpos, double ypos)
+void FFTRenderer::CursorCallback(GLFWwindow* window, double xpos, double ypos)
 {
-	auto app = reinterpret_cast<GroundTruthRenderer*>(glfwGetWindowUserPointer(window));
+	auto app = reinterpret_cast<FFTRenderer*>(glfwGetWindowUserPointer(window));
 	app->main_camera.processMouseMovement(window, xpos, ypos);
 }
 
-void GroundTruthRenderer::FramebufferResizeCallback(GLFWwindow* window, int width, int height)
+void FFTRenderer::FramebufferResizeCallback(GLFWwindow* window, int width, int height)
 {
-	auto app = reinterpret_cast<GroundTruthRenderer*>(glfwGetWindowUserPointer(window));
+	auto app = reinterpret_cast<FFTRenderer*>(glfwGetWindowUserPointer(window));
 	app->resize_requested = true;
 	if (width == 0 || height == 0)
 		app->stop_rendering = true;
@@ -90,7 +88,7 @@ void GroundTruthRenderer::FramebufferResizeCallback(GLFWwindow* window, int widt
 		app->stop_rendering = false;
 }
 
-void GroundTruthRenderer::InitEngine()
+void FFTRenderer::InitEngine()
 {
 	//Request required GPU features and extensions
 	//vulkan 1.3 features
@@ -128,12 +126,12 @@ void GroundTruthRenderer::InitEngine()
 	scene_manager->Init(resource_manager, engine);
 }
 
-void GroundTruthRenderer::InitSwapchain()
+void FFTRenderer::InitSwapchain()
 {
 	CreateSwapchain(_windowExtent.width, _windowExtent.height);
 }
 
-void GroundTruthRenderer::InitRenderTargets()
+void FFTRenderer::InitRenderTargets()
 {
 	VkExtent3D drawImageExtent = {
 	_windowExtent.width,
@@ -179,7 +177,7 @@ void GroundTruthRenderer::InitRenderTargets()
 }
 
 
-void GroundTruthRenderer::InitCommands()
+void FFTRenderer::InitCommands()
 {
 	VkCommandPoolCreateInfo commandPoolInfo = vkinit::command_pool_create_info(engine->_graphicsQueueFamily, VK_COMMAND_POOL_CREATE_RESET_COMMAND_BUFFER_BIT);
 
@@ -198,7 +196,7 @@ void GroundTruthRenderer::InitCommands()
 
 }
 
-void GroundTruthRenderer::InitSyncStructures()
+void FFTRenderer::InitSyncStructures()
 {
 	VkFenceCreateInfo fenceCreateInfo = vkinit::fence_create_info(VK_FENCE_CREATE_SIGNALED_BIT);
 	for (int i = 0; i < FRAME_OVERLAP; i++) {
@@ -218,7 +216,7 @@ void GroundTruthRenderer::InitSyncStructures()
 	}
 }
 
-void GroundTruthRenderer::InitDescriptors()
+void FFTRenderer::InitDescriptors()
 {
 	//create a descriptor pool that will hold 10 sets with 1 image each
 	std::vector<DescriptorAllocator::PoolSizeRatio> sizes = {
@@ -231,23 +229,6 @@ void GroundTruthRenderer::InitDescriptors()
 	_mainDeletionQueue.push_function(
 		[&]() { vkDestroyDescriptorPool(engine->_device, globalDescriptorAllocator.pool, nullptr); });
 
-
-	{
-		DescriptorLayoutBuilder builder;
-		builder.add_binding(0, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER);
-		builder.add_binding(1, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER);
-		builder.add_binding(2, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER);
-		post_process_descriptor_layout = builder.build(engine->_device, VK_SHADER_STAGE_FRAGMENT_BIT);
-	}
-
-	{
-		DescriptorLayoutBuilder builder;
-		builder.add_binding(0, VK_DESCRIPTOR_TYPE_STORAGE_IMAGE);
-		builder.add_binding(1, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER);
-		builder.add_binding(2, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER);
-		builder.add_binding(3, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER);
-		trace_descriptor_layout = builder.build(engine->_device, VK_SHADER_STAGE_COMPUTE_BIT);
-	}
 
 	{
 		DescriptorLayoutBuilder builder;
@@ -265,9 +246,7 @@ void GroundTruthRenderer::InitDescriptors()
 	}
 
 	_mainDeletionQueue.push_function([&]() {
-		vkDestroyDescriptorSetLayout(engine->_device, post_process_descriptor_layout, nullptr);
 		vkDestroyDescriptorSetLayout(engine->_device, skybox_descriptor_layout, nullptr);
-		vkDestroyDescriptorSetLayout(engine->_device, trace_descriptor_layout, nullptr);
 		vkDestroyDescriptorSetLayout(engine->_device, resource_manager->bindless_descriptor_layout, nullptr);
 		});
 
@@ -297,15 +276,52 @@ void GroundTruthRenderer::InitDescriptors()
 	}
 }
 
-
-void GroundTruthRenderer::InitPipelines()
+void FFTRenderer::BuildOceanMesh()
 {
-	
+	float tex_coord_scale = 2.f;
+	size_t GRID_DIM = surface.grid_dimensions;
+	size_t vertex_count = GRID_DIM + 1;
+	surface.vertices.resize(vertex_count * vertex_count);
+	surface.indices.resize(GRID_DIM * GRID_DIM * 2 * 3);
+
+	int idx = 0;
+	for (int z = -GRID_DIM / 2; z <= GRID_DIM / 2; ++z)
+	{
+		for (int x = -GRID_DIM / 2; x <= GRID_DIM / 2; ++x)
+		{
+			surface.vertices[idx].position = glm::vec3(float(x), 0.f, float(z));
+
+			float u = ((float)x / GRID_DIM) + 0.5f;
+			float v = ((float)z / GRID_DIM) + 0.5f;
+			surface.vertices[idx++].uv = glm::vec2(u, v) * tex_coord_scale;
+		}
+	}
+
+	idx = 0;
+
+	for (unsigned int y = 0; y < GRID_DIM; ++y)
+	{
+		for (unsigned int x = 0; x < GRID_DIM; ++x)
+		{
+			surface.indices[idx++] = (vertex_count * y) + x;
+			surface.indices[idx++] = (vertex_count * (y + 1)) + x;
+			surface.indices[idx++] = (vertex_count * y) + x + 1;
+
+			surface.indices[idx++] = (vertex_count * y) + x + 1;
+			surface.indices[idx++] = (vertex_count * (y + 1)) + x;
+			surface.indices[idx++] = (vertex_count * (y + 1)) + x + 1;
+		}
+	}
+}
+
+
+void FFTRenderer::InitPipelines()
+{
 	InitComputePipelines();
 }
 
 
-void GroundTruthRenderer::InitComputePipelines()
+void FFTRenderer::InitComputePipelines()
 {
 	VkPipelineLayoutCreateInfo trace_rays_rays_layout_info = {};
 	trace_rays_rays_layout_info.sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO;
@@ -350,21 +366,34 @@ void GroundTruthRenderer::InitComputePipelines()
 		});
 }
 
-void GroundTruthRenderer::InitDefaultData()
+void FFTRenderer::InitDefaultData()
 {
 	assets_path = GetAssetPath();
+
+	//Create FFT resource images
+	uint32_t RES = surface.texture_dimensions;
+
+	std::vector<float> ping_phase_array(RES * RES);
+
+	//generate phase values
+	std::random_device dev;
+	std::mt19937 rng(dev());
+	std::uniform_real_distribution<> distFloat(0.f, 1.f);
+
+	for (size_t i = 0; i < RES * RES; ++i)
+		ping_phase_array[i] = distFloat(rng) * 2.f * M_PI;
+
+	surface.inital_spectrum_texture = resource_manager->CreateImage(VkExtent3D(RES, RES, 1), VK_FORMAT_R32_SFLOAT, VK_IMAGE_USAGE_SAMPLED_BIT | VK_IMAGE_USAGE_STORAGE_BIT);
+	surface.ping_phase_texture = resource_manager->CreateImage(ping_phase_array.data(), VkExtent3D(RES, RES, 1), VK_FORMAT_R32_SFLOAT, VK_IMAGE_USAGE_SAMPLED_BIT | VK_IMAGE_USAGE_STORAGE_BIT);
+	surface.pong_phase_texture = resource_manager->CreateImage(VkExtent3D(RES, RES, 1), VK_FORMAT_R32_SFLOAT, VK_IMAGE_USAGE_SAMPLED_BIT | VK_IMAGE_USAGE_STORAGE_BIT);
+
+	surface.spectrum_texture = resource_manager->CreateImage(VkExtent3D(RES, RES, 1), VK_FORMAT_R32G32B32A32_SFLOAT, VK_IMAGE_USAGE_SAMPLED_BIT | VK_IMAGE_USAGE_STORAGE_BIT);
+	surface.temp_texture = resource_manager->CreateImage(VkExtent3D(RES, RES, 1), VK_FORMAT_R32G32B32A32_SFLOAT, VK_IMAGE_USAGE_SAMPLED_BIT | VK_IMAGE_USAGE_STORAGE_BIT);
+	surface.normal_map = resource_manager->CreateImage(VkExtent3D(RES, RES, 1), VK_FORMAT_R32G32B32A32_SFLOAT, VK_IMAGE_USAGE_SAMPLED_BIT | VK_IMAGE_USAGE_STORAGE_BIT);
+
 	//Create default images
-	uint32_t white = glm::packUnorm4x8(glm::vec4(1, 1, 1, 1));
-	white_image = resource_manager->CreateImage((void*)&white, VkExtent3D{ 1, 1, 1 }, VK_FORMAT_R8G8B8A8_UNORM,
-		VK_IMAGE_USAGE_SAMPLED_BIT);
-
-	uint32_t grey = glm::packUnorm4x8(glm::vec4(0.66f, 0.66f, 0.66f, 1));
-	grey_image = resource_manager->CreateImage((void*)&grey, VkExtent3D{ 1, 1, 1 }, VK_FORMAT_R8G8B8A8_UNORM,
-		VK_IMAGE_USAGE_SAMPLED_BIT);
-
 	uint32_t black = glm::packUnorm4x8(glm::vec4(0, 0, 0, 0));
-	black_image = resource_manager->CreateImage((void*)&black, VkExtent3D{ 1, 1, 1 }, VK_FORMAT_R8G8B8A8_UNORM,
-		VK_IMAGE_USAGE_SAMPLED_BIT);
+	
 
 	storage_image = resource_manager->CreateImage((void*)&black, VkExtent3D{ 1, 1, 1 }, VK_FORMAT_R8G8B8A8_UNORM,
 		VK_IMAGE_USAGE_STORAGE_BIT | VK_IMAGE_USAGE_SAMPLED_BIT);
@@ -376,65 +405,23 @@ void GroundTruthRenderer::InitDefaultData()
 	main_camera.setPosition(glm::vec3(-0.12f, -5.14f, -2.25f));
 	main_camera.setRotation(glm::vec3(-17.0f, 7.0f, 0.0f));
 
-	//Populate point light list
-	int numOfLights = 1;
-	std::random_device dev;
-	std::mt19937 rng(dev());
-	std::uniform_real_distribution<> distFloat(-25.0f, 25.0f);
-	std::uniform_real_distribution<> distRadius(5.5f, 8.f);
-	std::uniform_real_distribution<> distRGB(0, 255.0f);
-	for (int i = 0; i < numOfLights; i++)
-	{
-		pointData.pointLights.push_back(PointLight(glm::vec4(distFloat(rng), (distFloat(rng) + 25.0f) / 2.0f, distFloat(rng), 1.0f), glm::vec4(distRGB(rng) / 255.0f, distRGB(rng) / 255.0f, distRGB(rng) / 255.0f, 1.0), distRadius(rng), 10.0f));
-		//pointData.pointLights.push_back(PointLight(glm::vec4(3, 5, 4.1,1.0), glm::vec4(1.0),10.3f, 10.0f));
-	}
-
-	glm::vec2 mip_extent(_windowExtent.width, _windowExtent.height);
-	glm::ivec2 mip_int_extent(mip_extent.r, mip_extent.g);
-	//Create Bloom mip texture
-	for (size_t i = 0; i < mip_chain_length; i++)
-	{
-		BlackKey::BloomMip mip;
-		mip_extent *= 0.5f;
-		mip_int_extent /= 2;
-		mip.size = mip_extent;
-		mip.i_size = mip_int_extent;
-		mip.mip = resource_manager->CreateImageEmpty(VkExtent3D(mip_extent.r, mip_extent.g, 1), VK_FORMAT_B10G11R11_UFLOAT_PACK32,
-			VK_IMAGE_USAGE_SAMPLED_BIT | VK_IMAGE_USAGE_STORAGE_BIT, VK_IMAGE_VIEW_TYPE_2D, false, 1);
-
-		bloom_mip_maps.emplace_back(mip);
-	}
-	
-
-	//checkerboard image
-	uint32_t magenta = glm::packUnorm4x8(glm::vec4(1, 0, 1, 1));
-	std::array<uint32_t, 16 * 16 > pixels; //for 16x16 checkerboard texture
-	for (int x = 0; x < 16; x++) {
-		for (int y = 0; y < 16; y++) {
-			pixels[y * 16 + x] = ((x % 2) ^ (y % 2)) ? magenta : black;
-		}
-	}
-
-	errorCheckerboardImage = resource_manager->CreateImage(pixels.data(), VkExtent3D{ 16, 16, 1 }, VK_FORMAT_R8G8B8A8_UNORM,
-		VK_IMAGE_USAGE_SAMPLED_BIT, this);
-
 	VkSamplerCreateInfo sampl = { .sType = VK_STRUCTURE_TYPE_SAMPLER_CREATE_INFO };
 
 	sampl.magFilter = VK_FILTER_NEAREST;
 	sampl.minFilter = VK_FILTER_NEAREST;
+	sampl.addressModeU = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE;
+	sampl.addressModeV = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE;
 
 	vkCreateSampler(engine->_device, &sampl, nullptr, &defaultSamplerNearest);
 
 	sampl.magFilter = VK_FILTER_LINEAR;
 	sampl.minFilter = VK_FILTER_LINEAR;
+	sampl.addressModeU = VK_SAMPLER_ADDRESS_MODE_REPEAT;
+	sampl.addressModeV = VK_SAMPLER_ADDRESS_MODE_REPEAT;
+
 	vkCreateSampler(engine->_device, &sampl, nullptr, &defaultSamplerLinear);
 
-	/*VkSamplerCreateInfo bloomSampl = sampl;
-	bloomSampl.addressModeU = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE;
-	bloomSampl.addressModeV = bloomSampl.addressModeU;
-	bloomSampl.addressModeW = bloomSampl.addressModeU;
-	vkCreateSampler(engine->_device, &bloomSampl, nullptr, &bloomSampler);
-	*/
+
 
 	VkSamplerCreateInfo cubeSampl = { .sType = VK_STRUCTURE_TYPE_SAMPLER_CREATE_INFO };
 	cubeSampl.magFilter = VK_FILTER_LINEAR;
@@ -455,25 +442,27 @@ void GroundTruthRenderer::InitDefaultData()
 	//< default_img
 
 	_mainDeletionQueue.push_function([=]() {
-		resource_manager->DestroyImage(white_image);
-		resource_manager->DestroyImage(grey_image);
-		resource_manager->DestroyImage(black_image);
+		resource_manager->DestroyImage(surface.inital_spectrum_texture);
+		resource_manager->DestroyImage(surface.ping_phase_texture);
+		resource_manager->DestroyImage(surface.pong_phase_texture);
+		resource_manager->DestroyImage(surface.spectrum_texture);
+		resource_manager->DestroyImage(surface.temp_texture);
+		resource_manager->DestroyImage(surface.normal_map);
 		resource_manager->DestroyImage(storage_image);
 		resource_manager->DestroyImage(_skyImage);
 		vkDestroySampler(engine->_device, defaultSamplerLinear, nullptr);
 		vkDestroySampler(engine->_device, defaultSamplerNearest, nullptr);
 		vkDestroySampler(engine->_device, cubeMapSampler, nullptr);
-		/*
-		for (size_t i = 0; i < bloom_mip_maps.size(); i++)
-		{
-			resource_manager->DestroyImage(bloom_mip_maps[i].mip);
-		}
-		*/
 		});
 }
 
+void FFTRenderer::BuildOceanMesh()
+{
 
-void GroundTruthRenderer::CreateSwapchain(uint32_t width, uint32_t height)
+}
+
+
+void FFTRenderer::CreateSwapchain(uint32_t width, uint32_t height)
 {
 	vkb::SwapchainBuilder swapchainBuilder{ engine->_chosenGPU,engine->_device,engine->_surface };
 
@@ -498,13 +487,13 @@ void GroundTruthRenderer::CreateSwapchain(uint32_t width, uint32_t height)
 }
 
 
-void GroundTruthRenderer::InitBuffers()
+void FFTRenderer::InitBuffers()
 {
 	
 }
 
 
-void GroundTruthRenderer::InitImgui()
+void FFTRenderer::InitImgui()
 {
 
 	// 1: create descriptor pool for IMGUI
@@ -573,7 +562,7 @@ void GroundTruthRenderer::InitImgui()
 		});
 }
 
-void GroundTruthRenderer::DestroySwapchain()
+void FFTRenderer::DestroySwapchain()
 {
 	vkDestroySwapchainKHR(engine->_device, swapchain, nullptr);
 
@@ -584,7 +573,7 @@ void GroundTruthRenderer::DestroySwapchain()
 	}
 }
 
-void GroundTruthRenderer::UpdateScene()
+void FFTRenderer::UpdateScene()
 {
 	float currentFrame = glfwGetTime();
 	float deltaTime = currentFrame - delta.lastFrame;
@@ -621,40 +610,12 @@ void GroundTruthRenderer::UpdateScene()
 	//loadedScenes["cube"]->Draw(glm::mat4{ 1.f }, skyDrawCommands);
 }
 
-void GroundTruthRenderer::LoadAssets()
+void FFTRenderer::LoadAssets()
 {
-	/*
-	//Load in skyBox image
-	_skyImage = vkutil::load_cubemap_image("../../assets/textures/hdris/overcast.ktx", VkExtent3D{ 1,1,1 }, engine, VK_FORMAT_R16G16B16A16_SFLOAT, VK_IMAGE_USAGE_SAMPLED_BIT | VK_IMAGE_USAGE_STORAGE_BIT, true);
-
-	std::string structurePath{ "../../assets/models/sponza/sponza.gltf" };
-	auto structureFile = resource_manager->loadGltf(engine, structurePath, true);
-	assert(structureFile.has_value());
-
-	std::string cubePath{ "../../assets/models/cube.gltf" };
-	auto cubeFile = resource_manager->loadGltf(engine, cubePath);
-	assert(cubeFile.has_value());
-
-	std::string planePath{ "../../assets/models/plane.glb" };
-	auto planeFile = resource_manager->loadGltf(engine, planePath);
-	assert(planeFile.has_value());
-
-	//loadedScenes["sponza"] = *structureFile;
-	loadedScenes["cube"] = *cubeFile;
-	loadedScenes["plane"] = *planeFile;
-
-	loadedScenes["sponza"]->Draw(glm::mat4{ 1.f }, drawCommands);
-	scene_manager->RegisterMeshAssetReference("sponza");
-	//Register render objects for draw indirect
-	scene_manager->RegisterObjectBatch(drawCommands);
-	scene_manager->MergeMeshes();
-	scene_manager->PrepareIndirectBuffers();
-	scene_manager->BuildBatches();
-	resource_manager->write_material_array();
-	*/
+	
 }
 
-void GroundTruthRenderer::Cleanup()
+void FFTRenderer::Cleanup()
 {
 	if (_isInitialized)
 	{
@@ -671,7 +632,7 @@ void GroundTruthRenderer::Cleanup()
 	engine = nullptr;
 }
 
-void GroundTruthRenderer::Trace(VkCommandBuffer cmd)
+void FFTRenderer::Trace(VkCommandBuffer cmd)
 {
 
 	VkDescriptorSet trace_descriptor = get_current_frame()._frameDescriptors.allocate(engine->_device, trace_descriptor_layout);
@@ -684,9 +645,8 @@ void GroundTruthRenderer::Trace(VkCommandBuffer cmd)
 	vkCmdDispatch(cmd, ((uint32_t)_windowExtent.width / 16) + 1, ((uint32_t)_windowExtent.height / 16) + 1, 1);
 }
 
-void GroundTruthRenderer::Draw()
+void FFTRenderer::Draw()
 {
-	ZoneScoped;
 	auto start_update = std::chrono::system_clock::now();
 	//wait until the gpu has finished rendering the last frame. Timeout of 1 second
 	VK_CHECK(vkWaitForFences(engine->_device, 1, &get_current_frame()._renderFence, true, 1000000000));
@@ -794,7 +754,7 @@ void GroundTruthRenderer::Draw()
 }
 
 
-void GroundTruthRenderer::DrawPostProcess(VkCommandBuffer cmd)
+void FFTRenderer::DrawPostProcess(VkCommandBuffer cmd)
 {
 	/*
 	ZoneScoped;
@@ -810,7 +770,7 @@ void GroundTruthRenderer::DrawPostProcess(VkCommandBuffer cmd)
 	*/
 }
 
-void GroundTruthRenderer::DrawBackground(VkCommandBuffer cmd)
+void FFTRenderer::DrawBackground(VkCommandBuffer cmd)
 {
 	/*
 	ZoneScoped;
@@ -880,7 +840,7 @@ void GroundTruthRenderer::DrawBackground(VkCommandBuffer cmd)
 	*/
 }
 
-void GroundTruthRenderer::DrawImgui(VkCommandBuffer cmd, VkImageView targetImageView)
+void FFTRenderer::DrawImgui(VkCommandBuffer cmd, VkImageView targetImageView)
 {
 	auto start_imgui = std::chrono::system_clock::now();
 	VkRenderingAttachmentInfo colorAttachment = vkinit::attachment_info(targetImageView, nullptr, nullptr, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL);
@@ -896,7 +856,7 @@ void GroundTruthRenderer::DrawImgui(VkCommandBuffer cmd, VkImageView targetImage
 	stats.ui_draw_time = elapsed_imgui.count() / 1000.f;
 }
 
-void GroundTruthRenderer::Run()
+void FFTRenderer::Run()
 {
 	bool bQuit = false;
 
@@ -935,10 +895,9 @@ void GroundTruthRenderer::Run()
 		auto elapsed = std::chrono::duration_cast<std::chrono::microseconds>(end - start);
 		stats.frametime = elapsed.count() / 1000.f;
 	}
-	FrameMark;
 }
 
-void GroundTruthRenderer::ResizeSwapchain()
+void FFTRenderer::ResizeSwapchain()
 {
 	vkDeviceWaitIdle(engine->_device);
 
@@ -968,7 +927,7 @@ void GroundTruthRenderer::ResizeSwapchain()
 	resize_requested = false;
 }
 
-void GroundTruthRenderer::DrawUI()
+void FFTRenderer::DrawUI()
 {
 	// Demonstrate the various window flags. Typically you would just use the default!
 	static bool no_titlebar = false;
@@ -1111,7 +1070,6 @@ void GroundTruthRenderer::DrawUI()
 		ImGui::Text("UI render time %f ms", stats.ui_draw_time);
 		ImGui::Text("Update time %f ms", stats.update_time);
 		ImGui::Text("Shadow Pass time %f ms", stats.shadow_pass_time);
-		ImGui::Text("Number of active point light %i", static_cast<int>(pointData.pointLights.size()));
 	}
 	ImGui::End();
 }
