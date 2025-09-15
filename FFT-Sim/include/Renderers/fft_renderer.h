@@ -4,6 +4,15 @@
 #include "base_renderer.h"
 #include "../vk_engine.h"
 
+struct FFTParams {
+	uint32_t resolution;
+	uint32_t ocean_size;
+	glm::vec2 wind;
+	float delta_time;
+	float choppiness;
+	uint32_t total_count;
+	uint32_t subseq_count;
+};
 struct OceanVertex {
 	glm::vec3 position;
 	glm::vec2 uv;

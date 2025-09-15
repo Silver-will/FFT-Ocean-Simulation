@@ -1,0 +1,48 @@
+#version 460
+layout(local_size_x = 32, local_size_y = 32, local_size_z = 1)in;
+
+layout(set = 0, binding = 0,r32f) readonly uniform image2D phases;
+layout(set = 0, binding = 1,r32f) writeonly uniform image2D delta_phases;
+
+layout( push_constant ) uniform constants
+{
+	uint resolution;
+	uint ocean_size;
+	vec2 wind;
+	float delta_time;
+	float choppiness;
+	uint total_count;
+	uint subseq_count;
+} PushConstants;
+
+
+const float PI = 3.14159265359;
+const float g = 9.81;
+const float KM = 370.0;
+const float CM = 0.23;
+
+
+float omega(float k)
+{
+    return sqrt(g * k * (1.0 + k * k / KM * KM));
+}
+
+void main()
+{
+    ivec2 pixel_coord = ivec2(gl_GlobalInvocationID.xy);
+
+    float n = (pixel_coord.x < 0.5f * PushConstants.resolution) ? pixel_coord.x : pixel_coord.x - PushConstants.resolution;
+	float m = (pixel_coord.y < 0.5f * PushConstants.resolution) ? pixel_coord.y : pixel_coord.y - PushConstants.resolution;
+
+    vec2 wave_vector = (2.f * PI * vec2(n, m)) / PushConstants.ocean_size;
+	float k = length(wave_vector);
+
+    // Note: An ad-hoc factor to make the phase change per-frame slow
+    float slowdown_factor = 1.f;
+
+    float delta_phase = omega(k) * PushConstants.delta_time * slowdown_factor;
+    float phase = imageLoad(phases, pixel_coord).r;
+    phase = mod(phase + delta_phase, 2.f * PI);
+
+    imageStore(delta_phases, pixel_coord, vec4(phase, 0.f, 0.f, 0.f));
+}
