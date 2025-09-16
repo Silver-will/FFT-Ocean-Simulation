@@ -28,8 +28,7 @@ struct SkyBoxPipelineResources {
 	MaterialInstance write_material(VkDevice device, vkutil::MaterialPass pass, const MaterialResources& resources, DescriptorAllocatorGrowable& descriptorAllocator);
 };
 
-
-struct UpsamplePipelineObject {
+struct RenderImagePipelineObject {
 	MaterialPipeline renderImagePipeline;
 	VkDescriptorSetLayout materialLayout;
 
@@ -43,5 +42,11 @@ struct UpsamplePipelineObject {
 
 	void build_pipelines(VulkanEngine* engine, PipelineCreationInfo& info);
 
+	void clear_resources(VkDevice device);
+};
+
+struct FFTPipelineObject {
+	MaterialPipeline FFTOceanPipeline;
+	void build_pipelines(VulkanEngine* engine, PipelineCreationInfo& info);
 	void clear_resources(VkDevice device);
 };

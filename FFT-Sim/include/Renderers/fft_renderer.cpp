@@ -169,10 +169,29 @@ void FFTRenderer::InitRenderTargets()
 
 	VK_CHECK(vkCreateImageView(engine->_device, &rview_info, nullptr, &_drawImage.imageView));
 
+
+	_depthImage.imageFormat = VK_FORMAT_D32_SFLOAT;
+	_depthImage.imageExtent = drawImageExtent;
+	VkImageUsageFlags depthImageUsages{};
+	depthImageUsages |= VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT;
+
+	VkImageCreateInfo depth_info = vkinit::image_create_info(_depthImage.imageFormat, depthImageUsages | VK_IMAGE_USAGE_SAMPLED_BIT, drawImageExtent, 1);
+
+	//allocate and create the image
+	vmaCreateImage(engine->_allocator, &depth_info, &rimg_allocinfo, &_depthImage.image, &_depthImage.allocation, nullptr);
+
+	//build a image-view for the draw image to use for rendering
+	VkImageViewCreateInfo dRview_info = vkinit::imageview_create_info(_depthImage.imageFormat, _depthImage.image, VK_IMAGE_ASPECT_DEPTH_BIT, VK_IMAGE_VIEW_TYPE_2D);
+
+	VK_CHECK(vkCreateImageView(engine->_device, &dRview_info, nullptr, &_depthImage.imageView));
+
 	//add to deletion queues
 	resource_manager->deletionQueue.push_function([=]() {
 		vkDestroyImageView(engine->_device, _drawImage.imageView, nullptr);
 		vmaDestroyImage(engine->_allocator, _drawImage.image, _drawImage.allocation);
+
+		vkDestroyImageView(engine->_device, _depthImage.imageView, nullptr);
+		vmaDestroyImage(engine->_allocator, _depthImage.image, _drawImage.allocation);
 		});
 }
 
@@ -232,6 +251,33 @@ void FFTRenderer::InitDescriptors()
 
 	{
 		DescriptorLayoutBuilder builder;
+		builder.add_binding(0, VK_DESCRIPTOR_TYPE_STORAGE_IMAGE);
+		builder.add_binding(1, VK_DESCRIPTOR_TYPE_STORAGE_IMAGE);
+		image_blit_layout = builder.build(engine->_device, VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_FRAGMENT_BIT);
+	}
+
+	{
+		DescriptorLayoutBuilder builder;
+		builder.add_binding(0, VK_DESCRIPTOR_TYPE_STORAGE_IMAGE);
+		initial_spectrum_layout = builder.build(engine->_device, VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_FRAGMENT_BIT);
+	}
+
+	{
+		DescriptorLayoutBuilder builder;
+		builder.add_binding(0, VK_DESCRIPTOR_TYPE_STORAGE_IMAGE);
+		builder.add_binding(1, VK_DESCRIPTOR_TYPE_STORAGE_IMAGE);
+		builder.add_binding(2, VK_DESCRIPTOR_TYPE_STORAGE_IMAGE);
+		spectrum_layout = builder.build(engine->_device, VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_FRAGMENT_BIT);
+	}
+
+	{
+		DescriptorLayoutBuilder builder;
+		builder.add_binding(0, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER);
+		builder.add_binding(1, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER);
+		ocean_shading_layout = builder.build(engine->_device, VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_FRAGMENT_BIT);
+	}
+	{
+		DescriptorLayoutBuilder builder;
 		builder.add_binding(0, VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER);
 		builder.add_binding(1, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER);
 		skybox_descriptor_layout = builder.build(engine->_device, VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_FRAGMENT_BIT);
@@ -246,6 +292,10 @@ void FFTRenderer::InitDescriptors()
 	}
 
 	_mainDeletionQueue.push_function([&]() {
+		vkDestroyDescriptorSetLayout(engine->_device, initial_spectrum_layout, nullptr);
+		vkDestroyDescriptorSetLayout(engine->_device, image_blit_layout, nullptr);
+		vkDestroyDescriptorSetLayout(engine->_device, spectrum_layout, nullptr);
+		vkDestroyDescriptorSetLayout(engine->_device, ocean_shading_layout, nullptr);
 		vkDestroyDescriptorSetLayout(engine->_device, skybox_descriptor_layout, nullptr);
 		vkDestroyDescriptorSetLayout(engine->_device, resource_manager->bindless_descriptor_layout, nullptr);
 		});
@@ -317,52 +367,123 @@ void FFTRenderer::BuildOceanMesh()
 
 void FFTRenderer::InitPipelines()
 {
+	PipelineCreationInfo info;
+	info.layouts.push_back(ocean_shading_layout);
+	info.imageFormat = _drawImage.imageFormat;
+	info.depthFormat = _depthImage.imageFormat;
+	fft_pipeline.build_pipelines(engine, info);
 	InitComputePipelines();
 }
 
 
 void FFTRenderer::InitComputePipelines()
 {
-	VkPipelineLayoutCreateInfo trace_rays_rays_layout_info = {};
-	trace_rays_rays_layout_info.sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO;
-	trace_rays_rays_layout_info.pNext = nullptr;
-	trace_rays_rays_layout_info.pSetLayouts = &trace_descriptor_layout;
-	trace_rays_rays_layout_info.setLayoutCount = 1;
+	auto spectrum_layout_info = vkinit::pipeline_layout_create_info();
+	spectrum_layout_info.pSetLayouts = &spectrum_layout;
+	spectrum_layout_info.setLayoutCount = 1;
 
 	VkPushConstantRange push_constant{};
 	push_constant.offset = 0;
-	push_constant.size = sizeof(TraceParams);
+	push_constant.size = sizeof(FFTParams);
 	push_constant.stageFlags = VK_SHADER_STAGE_COMPUTE_BIT;
 
-	trace_rays_rays_layout_info.pPushConstantRanges = nullptr;
-	trace_rays_rays_layout_info.pushConstantRangeCount = 0;
+	spectrum_layout_info.pPushConstantRanges = &push_constant;
+	spectrum_layout_info.pushConstantRangeCount = 1;
 
+	VK_CHECK(vkCreatePipelineLayout(engine->_device, &spectrum_layout_info, nullptr, &spectrum_pso.layout));
 
-	VK_CHECK(vkCreatePipelineLayout(engine->_device, &trace_rays_rays_layout_info, nullptr, &trace_rays_pso.layout));
-
-	VkShaderModule trace_shader;
-	if (!vkutil::load_shader_module(std::string(assets_path + "/shaders/gradient.spv").c_str(), engine->_device, &trace_shader)) {
+	VkShaderModule spectrum_shader;
+	if (!vkutil::load_shader_module(std::string(assets_path + "/shaders/spectrum.spv").c_str(), engine->_device, &spectrum_shader)) {
 		std::print("Error when building the compute shader \n");
 	}
 	
-	VkPipelineShaderStageCreateInfo stage_info{};
-	stage_info.sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO;
-	stage_info.pNext = nullptr;
-	stage_info.stage = VK_SHADER_STAGE_COMPUTE_BIT;
-	stage_info.module = trace_shader;
-	stage_info.pName = "main";
+	auto spectrum_stage_info = vkinit::pipeline_shader_stage_create_info(VK_SHADER_STAGE_COMPUTE_BIT, spectrum_shader);
+	auto spectrum_compute_pipeline_creation_info = vkinit::compute_pipeline_create_info(spectrum_pso.layout, spectrum_stage_info);
+	
+	VK_CHECK(vkCreateComputePipelines(engine->_device, VK_NULL_HANDLE, 1, &spectrum_compute_pipeline_creation_info, nullptr, &spectrum_pso.pipeline));
 
-	VkComputePipelineCreateInfo compute_pipeline_creation_info{};
-	compute_pipeline_creation_info.sType = VK_STRUCTURE_TYPE_COMPUTE_PIPELINE_CREATE_INFO;
-	compute_pipeline_creation_info.pNext = nullptr;
-	compute_pipeline_creation_info.layout = trace_rays_pso.layout;
-	compute_pipeline_creation_info.stage = stage_info;
+	auto image_blit_layout_info = vkinit::pipeline_layout_create_info();
+	image_blit_layout_info.pSetLayouts = &image_blit_layout;
+	image_blit_layout_info.setLayoutCount = 1;
 
-	VK_CHECK(vkCreateComputePipelines(engine->_device, VK_NULL_HANDLE, 1, &compute_pipeline_creation_info, nullptr, &trace_rays_pso.pipeline));
+	image_blit_layout_info.pPushConstantRanges = &push_constant;
+	image_blit_layout_info.pushConstantRangeCount = 1;
+
+	VK_CHECK(vkCreatePipelineLayout(engine->_device, &image_blit_layout_info, nullptr, &phase_pso.layout));
+
+	VkShaderModule phase_shader;
+	if (!vkutil::load_shader_module(std::string(assets_path + "/shaders/phase.spv").c_str(), engine->_device, &phase_shader)) {
+		std::print("Error when building the compute shader \n");
+	}
+
+	auto phase_stage_info = vkinit::pipeline_shader_stage_create_info(VK_SHADER_STAGE_COMPUTE_BIT, phase_shader);
+	auto phase_compute_pipeline_creation_info = vkinit::compute_pipeline_create_info(phase_pso.layout, phase_stage_info);
+
+	VK_CHECK(vkCreateComputePipelines(engine->_device, VK_NULL_HANDLE, 1, &phase_compute_pipeline_creation_info, nullptr, &phase_pso.pipeline));
+
+
+	VK_CHECK(vkCreatePipelineLayout(engine->_device, &image_blit_layout_info, nullptr, &fft_vertical_pso.layout));
+
+	VkShaderModule fft_vertical_shader;
+	if (!vkutil::load_shader_module(std::string(assets_path + "/shaders/fft_vertical.spv").c_str(), engine->_device, &fft_vertical_shader)) {
+		std::print("Error when building the compute shader \n");
+	}
+
+	auto fft_vertical_stage_info = vkinit::pipeline_shader_stage_create_info(VK_SHADER_STAGE_COMPUTE_BIT, fft_vertical_shader);
+	auto fft_vertical_compute_pipeline_creation_info = vkinit::compute_pipeline_create_info(fft_vertical_pso.layout, fft_vertical_stage_info);
+
+	VK_CHECK(vkCreateComputePipelines(engine->_device, VK_NULL_HANDLE, 1, &fft_vertical_compute_pipeline_creation_info, nullptr, &fft_vertical_pso.pipeline));
+
+	VK_CHECK(vkCreatePipelineLayout(engine->_device, &image_blit_layout_info, nullptr, &fft_horizontal_pso.layout));
+
+	VkShaderModule fft_horizontal_shader;
+	if (!vkutil::load_shader_module(std::string(assets_path + "/shaders/fft_horizontal.spv").c_str(), engine->_device, &fft_horizontal_shader)) {
+		std::print("Error when building the compute shader \n");
+	}
+
+	auto fft_horizontal_stage_info = vkinit::pipeline_shader_stage_create_info(VK_SHADER_STAGE_COMPUTE_BIT, fft_horizontal_shader);
+	auto fft_horizontal_compute_pipeline_creation_info = vkinit::compute_pipeline_create_info(fft_horizontal_pso.layout, fft_horizontal_stage_info);
+
+	VK_CHECK(vkCreateComputePipelines(engine->_device, VK_NULL_HANDLE, 1, &fft_horizontal_compute_pipeline_creation_info, nullptr, &fft_horizontal_pso.pipeline));
+
+	VK_CHECK(vkCreatePipelineLayout(engine->_device, &image_blit_layout_info, nullptr, &normal_calculation_pso.layout));
+
+	VkShaderModule normal_shader;
+	if (!vkutil::load_shader_module(std::string(assets_path + "/shaders/normal_map.spv").c_str(), engine->_device, &normal_shader)) {
+		std::print("Error when building the compute shader \n");
+	}
+
+	auto normal_stage_info = vkinit::pipeline_shader_stage_create_info(VK_SHADER_STAGE_COMPUTE_BIT, normal_shader);
+	auto normal_compute_pipeline_creation_info = vkinit::compute_pipeline_create_info(normal_calculation_pso.layout, normal_stage_info);
+
+	VK_CHECK(vkCreateComputePipelines(engine->_device, VK_NULL_HANDLE, 1, &normal_compute_pipeline_creation_info, nullptr, &normal_calculation_pso.pipeline));
+
+	auto initial_spectrum_layout_info = vkinit::pipeline_layout_create_info();
+	initial_spectrum_layout_info.pSetLayouts = &initial_spectrum_layout;
+	initial_spectrum_layout_info.setLayoutCount = 1;
+
+	
+	initial_spectrum_layout_info.pPushConstantRanges = &push_constant;
+	initial_spectrum_layout_info.pushConstantRangeCount = 0;
+
+	VK_CHECK(vkCreatePipelineLayout(engine->_device, &initial_spectrum_layout_info, nullptr, &initial_spectrum_pso.layout));
+
+	VkShaderModule initial_spectrum_shader;
+	if (!vkutil::load_shader_module(std::string(assets_path + "/shaders/initial_spectrum.spv").c_str(), engine->_device, &initial_spectrum_shader)) {
+		std::print("Error when building the compute shader \n");
+	}
+
+	auto initial_spectrum_stage_info = vkinit::pipeline_shader_stage_create_info(VK_SHADER_STAGE_COMPUTE_BIT, initial_spectrum_shader);
+	auto initial_spectrum_compute_pipeline_creation_info = vkinit::compute_pipeline_create_info(initial_spectrum_pso.layout, initial_spectrum_stage_info);
+
+	VK_CHECK(vkCreateComputePipelines(engine->_device, VK_NULL_HANDLE, 1, &initial_spectrum_compute_pipeline_creation_info, nullptr, &initial_spectrum_pso.pipeline));
 
 	_mainDeletionQueue.push_function([=]() {
-		vkDestroyPipelineLayout(engine->_device, trace_rays_pso.layout, nullptr);
-		vkDestroyPipeline(engine->_device, trace_rays_pso.pipeline, nullptr);
+		resource_manager->DestroyPSO(spectrum_pso);
+		resource_manager->DestroyPSO(initial_spectrum_pso);
+		resource_manager->DestroyPSO(normal_calculation_pso);
+		resource_manager->DestroyPSO(fft_vertical_pso);
+		resource_manager->DestroyPSO(fft_horizontal_pso);
 		});
 }
 
@@ -598,16 +719,6 @@ void FFTRenderer::UpdateScene()
 	//sceneData.skyMat = model;
 	scene_data.skyMat = scene_data.proj * glm::mat4(glm::mat3(scene_data.view));
 
-	//some default lighting parameters
-	scene_data.sunlightColor = directLight.color;
-	scene_data.sunlightDirection = directLight.direction;
-	scene_data.lightCount = pointData.pointLights.size();
-	scene_data.ConfigData.x = main_camera.getNearClip();
-	scene_data.ConfigData.y = main_camera.getFarClip();
-
-	//Prepare Render objects
-	//loadedScenes["sponza"]->Draw(glm::mat4{ 1.f }, drawCommands);
-	//loadedScenes["cube"]->Draw(glm::mat4{ 1.f }, skyDrawCommands);
 }
 
 void FFTRenderer::LoadAssets()
@@ -635,14 +746,7 @@ void FFTRenderer::Cleanup()
 void FFTRenderer::Trace(VkCommandBuffer cmd)
 {
 
-	VkDescriptorSet trace_descriptor = get_current_frame()._frameDescriptors.allocate(engine->_device, trace_descriptor_layout);
-	DescriptorWriter writer;
-	writer.write_image(0,_drawImage.imageView,defaultSamplerLinear, VK_IMAGE_LAYOUT_GENERAL, VK_DESCRIPTOR_TYPE_STORAGE_IMAGE);
-	writer.update_set(engine->_device, trace_descriptor);
 
-	vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, trace_rays_pso.pipeline);
-	vkCmdBindDescriptorSets(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, trace_rays_pso.layout, 0, 1, &trace_descriptor, 0, nullptr);
-	vkCmdDispatch(cmd, ((uint32_t)_windowExtent.width / 16) + 1, ((uint32_t)_windowExtent.height / 16) + 1, 1);
 }
 
 void FFTRenderer::Draw()
@@ -970,46 +1074,7 @@ void FFTRenderer::DrawUI()
 	if (ImGui::CollapsingHeader("Lighting"))
 	{
 		std::string index{};
-		if (ImGui::TreeNode("Point Lights"))
-		{
-			for (size_t i = 0; i < pointData.pointLights.size(); i++)
-			{
-				index = std::to_string(i);
-				if (ImGui::TreeNode(("Point "s + index).c_str()))
-				{
-					if (ImGui::TreeNode("Position"))
-					{
-						float pos[3] = { pointData.pointLights[i].position.x, pointData.pointLights[i].position.y, pointData.pointLights[i].position.z };
-						ImGui::SliderFloat3("x,y,z", pos, -15.0f, 15.0f);
-						pointData.pointLights[i].position = glm::vec4(pos[0], pos[1], pos[2], 1.0f);
-						ImGui::TreePop();
-						ImGui::Spacing();
-					}
-					if (ImGui::TreeNode("Color"))
-					{
-						float col[4] = { pointData.pointLights[i].color.x, pointData.pointLights[i].color.y, pointData.pointLights[i].color.z, pointData.pointLights[i].color.w };
-						ImGui::ColorEdit4("Light color", col);
-						pointData.pointLights[i].color = glm::vec4(col[0], col[1], col[2], col[3]);
-						ImGui::TreePop();
-						ImGui::Spacing();
-					}
-
-					if (ImGui::TreeNode("Attenuation"))
-					{
-						//move this declaration to a higher scope later
-						ImGui::SliderFloat("Range", &pointData.pointLights[i].range, 0.0f, 15.0f);
-						ImGui::SliderFloat("Intensity", &pointData.pointLights[i].intensity, 0.0f, 5.0f);
-						//ImGui::SliderFloat("quadratic", &points[i].quadratic, 0.0f, 2.0f);
-						//ImGui::SliderFloat("radius", &points[i].quadratic, 0.0f, 100.0f);
-						ImGui::TreePop();
-						ImGui::Spacing();
-
-					}
-					ImGui::TreePop();
-				}
-			}
-			ImGui::TreePop();
-		}
+		
 		if (ImGui::TreeNode("Direct Light"))
 		{
 			ImGui::SeparatorText("direction");

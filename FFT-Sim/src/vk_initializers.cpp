@@ -462,6 +462,16 @@ VkPipelineLayoutCreateInfo vkinit::pipeline_layout_create_info()
     return info;
 }
 
+VkComputePipelineCreateInfo vkinit::compute_pipeline_create_info(VkPipelineLayout& layout, VkPipelineShaderStageCreateInfo& shaderStage)
+{
+    VkComputePipelineCreateInfo info{};
+    info.sType = VK_STRUCTURE_TYPE_COMPUTE_PIPELINE_CREATE_INFO;
+    info.pNext = nullptr;
+    info.layout = layout;
+    info.stage = shaderStage;
+
+    return info;
+}
 VkPipelineShaderStageCreateInfo vkinit::pipeline_shader_stage_create_info(VkShaderStageFlagBits stage,
     VkShaderModule shaderModule,
     const char * entry)

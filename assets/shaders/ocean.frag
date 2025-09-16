@@ -8,14 +8,12 @@ layout (location = 0) out vec4 outFragColor;
 
 layout (set = 0, binding = 1) uniform sampler2D normal_map;
 
-layout( push_constant ) uniform constants
-{
-	vec3 world_camera_pos;
+layout(set = 0, binding = 2) uniform  SceneData{   
+    vec3 world_camera_pos;
     int show_wireframe;
-    vec3 sun_direction;
-    
-} PushConstants;
-
+    vec3 sun_direction;    
+    int padding;
+} sceneData;
 
 vec3 HDR(vec3 color, float exposure)
 {
@@ -24,15 +22,15 @@ vec3 HDR(vec3 color, float exposure)
 
 void main()
 {
-    if (PushConstants.show_wireframe)
+    if (padding.show_wireframe == 1)
     {
-        FS_out_color = vec4(0.f, 0.f, 0.f, 1.f);
+        outFragColor = vec4(0.f, 0.f, 0.f, 1.f);
         return;
     }
 
     vec3 normal = texture(normal_map, inUV).xyz;
     
-	vec3 view_dir = normalize(PushConstants.world_camera_pos - inFragPos);
+	vec3 view_dir = normalize(padding.world_camera_pos - inFragPos);
     float fresnel = 0.02f + 0.98f * pow(1.f - dot(normal, view_dir), 5.f);
     
     vec3 sky_color = vec3(3.2f, 9.6f, 12.8f);
@@ -40,7 +38,7 @@ void main()
     float exposure = 0.35f;
     
     vec3 sky = fresnel * sky_color;
-    float diffuse = clamp(dot(normal, normalize(-PushConstants.sun_direction)), 0.f, 1.f);
+    float diffuse = clamp(dot(normal, normalize(-padding.sun_direction)), 0.f, 1.f);
     vec3 water = (1.f - fresnel) * ocean_color * sky_color * diffuse;
     
     vec3 color = sky + water;

@@ -4,6 +4,9 @@
 #include "base_renderer.h"
 #include "../vk_engine.h"
 
+struct HeightSimParams {
+	uint32_t resolution;
+};
 struct FFTParams {
 	uint32_t resolution;
 	uint32_t ocean_size;
@@ -80,6 +83,11 @@ private:
 	DrawContext skyDrawCommands;
 
 	VkDescriptorSetLayout skybox_descriptor_layout;
+	VkDescriptorSetLayout spectrum_layout;
+	VkDescriptorSetLayout initial_spectrum_layout;
+	VkDescriptorSetLayout image_blit_layout;
+	VkDescriptorSetLayout ocean_shading_layout;
+
 
 	Camera main_camera;
 	std::shared_ptr<ResourceManager> resource_manager;
@@ -136,13 +144,13 @@ private:
 	VkPipeline gradient_pipeline;
 	VkPipelineLayout gradient_pipeline_layout;
 
+	FFTPipelineObject fft_pipeline;
 	PipelineStateObject fft_horizontal_pso;
 	PipelineStateObject fft_vertical_pso;
-	PipelineStateObject normal_caluclation_pso;
+	PipelineStateObject normal_calculation_pso;
 	PipelineStateObject initial_spectrum_pso;
 	PipelineStateObject spectrum_pso;
 	PipelineStateObject phase_pso;
-	PipelineStateObject trace_rays_pso;
 	GPUSceneData scene_data;
 
 	AllocatedImage white_image;

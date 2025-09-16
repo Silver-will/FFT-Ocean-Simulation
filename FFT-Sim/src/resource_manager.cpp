@@ -425,3 +425,9 @@ void ResourceManager::DestroyImage(const AllocatedImage& img)
     vkDestroyImageView(engine->_device, img.imageView, nullptr);
     vmaDestroyImage(engine->_allocator, img.image, img.allocation);
 }
+
+void ResourceManager::DestroyPSO(PipelineStateObject& pso)
+{
+    vkDestroyPipelineLayout(engine->_device, pso.layout, nullptr);
+    vkDestroyPipeline(engine->_device, pso.pipeline, nullptr);
+}
