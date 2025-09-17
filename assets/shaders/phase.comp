@@ -31,11 +31,13 @@ void main()
 {
     ivec2 pixel_coord = ivec2(gl_GlobalInvocationID.xy);
 
+    int ocean_size = int(PushConstants.ocean_size);
+    int resolution = int(PushConstants.resolution);
     ivec2 img_size = imageSize(phases);
-    float n = (pixel_coord.x < 0.5f * PushConstants.resolution) ? pixel_coord.x : pixel_coord.x - PushConstants.resolution;
-	float m = (pixel_coord.y < 0.5f * PushConstants.resolution) ? pixel_coord.y : pixel_coord.y - PushConstants.resolution;
+    float n = (pixel_coord.x < 0.5f * resolution) ? pixel_coord.x : pixel_coord.x - resolution;
+	float m = (pixel_coord.y < 0.5f * resolution) ? pixel_coord.y : pixel_coord.y - resolution;
 
-    vec2 wave_vector = (2.f * PI * vec2(n, m)) / PushConstants.ocean_size;
+    vec2 wave_vector = (2.f * PI * vec2(n, m)) / ocean_size;
 	float k = length(wave_vector);
 
     // Note: An ad-hoc factor to make the phase change per-frame slow
@@ -43,11 +45,8 @@ void main()
 
     float delta_phase = omega(k) * PushConstants.delta_time * slowdown_factor;
     float phase = imageLoad(phases, pixel_coord).r;
-    if(phase > 0.f && phase < 6.7f)
-        phase = phase;
-    else
-        phase = 0.2f;
-    //phase = mod(phase + delta_phase, 2.f * PI);
+   
+    phase = mod(phase + delta_phase, 2.f * PI);
 
     if(pixel_coord.x < img_size.x && pixel_coord.y < img_size.y)
     {

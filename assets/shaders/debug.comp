@@ -10,8 +10,8 @@ void main()
 	ivec2 imageCoord = ivec2(gl_GlobalInvocationID.xy);
 
 	ivec2 size = imageSize(outImage);
-
-	vec2 texCoord = vec2(imageCoord/size);
+	vec2 dims = vec2(size);
+	vec2 texCoord = vec2(imageCoord/dims);
 
 	if(imageCoord.x < size.x && imageCoord.y < size.y)
 	{

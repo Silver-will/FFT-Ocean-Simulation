@@ -61,8 +61,8 @@ target_link_libraries(${PROJECT_NAME}
     glfw
     ${VULKAN_LIBRARY}
     vk-bootstrap::vk-bootstrap
+    ${CMAKE_DL_LIBS}
     GPUOpen::VulkanMemoryAllocator
 )
-
 #add_custom_target(assets COMMAND ${CMAKE_COMMAND} -P ${CMAKE_CURRENT_LIST_DIR}/assets.cmake)
 #add_dependencies(${PROJECT_NAME} assets)

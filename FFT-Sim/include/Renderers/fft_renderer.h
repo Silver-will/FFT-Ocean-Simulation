@@ -104,6 +104,7 @@ private:
 	VkDescriptorSetLayout initial_spectrum_layout;
 	VkDescriptorSetLayout image_blit_layout;
 	VkDescriptorSetLayout ocean_shading_layout;
+	VkDescriptorSetLayout debug_layout;
 	std::vector<VkImageMemoryBarrier> image_barriers;
 
 	Camera main_camera;
