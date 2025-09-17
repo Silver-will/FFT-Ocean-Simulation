@@ -34,13 +34,14 @@ struct ResourceManager
 	//Resource management
 	AllocatedBuffer CreateBuffer(size_t allocSize, VkBufferUsageFlags usage, VmaMemoryUsage memoryUsage);
 	void DestroyBuffer(const AllocatedBuffer& buffer);
-	std::optional<AllocatedImage> LoadImage(std::string_view filePath, VkFormat format = VK_FORMAT_R8G8B8A8_UNORM)
+	std::optional<AllocatedImage> LoadImage(std::string_view filePath, VkFormat format = VK_FORMAT_R8G8B8A8_UNORM);
 	AllocatedBuffer CreateAndUpload(size_t allocSize, VkBufferUsageFlags usage, VmaMemoryUsage memoryUsage, void* data);
 	AllocatedImage CreateImage(VkExtent3D size, VkFormat format, VkImageUsageFlags usage, bool mipmapped = false);
 	AllocatedImage CreateImage(void* data, VkExtent3D size, VkFormat format, VkImageUsageFlags usage, bool mipmapped = false);
 	GPUMeshBuffers UploadMesh(std::span<uint32_t> indices, std::span<Vertex> vertices);
 	AllocatedImage CreateImageEmpty(VkExtent3D size, VkFormat format, VkImageUsageFlags usage, VkImageViewType viewType, bool mipmapped, int layers, VkSampleCountFlagBits msaaSamples = VK_SAMPLE_COUNT_1_BIT, int mipLevels = -1);
 	void DestroyImage(const AllocatedImage& img);
+	void DestroyPSO(PipelineStateObject& pso);
 	MaterialInstance SetMaterialProperties(const vkutil::MaterialPass pass, int mat_index);
 
 	DeletionQueue deletionQueue;

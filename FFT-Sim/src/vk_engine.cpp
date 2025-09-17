@@ -2,7 +2,6 @@
 
 #include "vk_initializers.h"
 #include "vk_types.h"
-#include "input_handler.h"
 #include "vk_images.h"
 #include "vk_pipelines.h"
 #include "vk_buffer.h"

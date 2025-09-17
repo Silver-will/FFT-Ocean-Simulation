@@ -32,7 +32,6 @@ struct OceanSurface {
 	AllocatedImage spectrum_texture;
 	AllocatedImage temp_texture;
 	AllocatedImage inital_spectrum_texture;
-	AllocatedImage spectrum_texture;
 	AllocatedImage normal_map;
 	AllocatedImage ping_phase_texture;
 	AllocatedImage pong_phase_texture;

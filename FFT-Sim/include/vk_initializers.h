@@ -53,7 +53,7 @@ VkImageCreateInfo image_cubemap_create_info(VkFormat format, VkImageUsageFlags u
 VkImageViewCreateInfo imageview_create_info(VkFormat format, VkImage image, VkImageAspectFlags aspectFlags, VkImageViewType viewType, int layerCount = 1);
 VkImageViewCreateInfo imageview_cubemap_create_info(VkFormat format, VkImage image, VkImageAspectFlags aspectFlags);
 VkPipelineLayoutCreateInfo pipeline_layout_create_info();
-VkComputePipelineCreateInfo compute_pipeline_create_info();
+VkComputePipelineCreateInfo compute_pipeline_create_info(VkPipelineLayout& layout, VkPipelineShaderStageCreateInfo& shaderStage);
 VkPipelineShaderStageCreateInfo pipeline_shader_stage_create_info(VkShaderStageFlagBits stage,
     VkShaderModule shaderModule,
     const char * entry = "main");

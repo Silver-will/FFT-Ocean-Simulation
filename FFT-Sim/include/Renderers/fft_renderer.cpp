@@ -253,13 +253,13 @@ void FFTRenderer::InitDescriptors()
 		DescriptorLayoutBuilder builder;
 		builder.add_binding(0, VK_DESCRIPTOR_TYPE_STORAGE_IMAGE);
 		builder.add_binding(1, VK_DESCRIPTOR_TYPE_STORAGE_IMAGE);
-		image_blit_layout = builder.build(engine->_device, VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_FRAGMENT_BIT);
+		image_blit_layout = builder.build(engine->_device, VK_SHADER_STAGE_COMPUTE_BIT);
 	}
 
 	{
 		DescriptorLayoutBuilder builder;
 		builder.add_binding(0, VK_DESCRIPTOR_TYPE_STORAGE_IMAGE);
-		initial_spectrum_layout = builder.build(engine->_device, VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_FRAGMENT_BIT);
+		initial_spectrum_layout = builder.build(engine->_device, VK_SHADER_STAGE_COMPUTE_BIT);
 	}
 
 	{
@@ -267,13 +267,14 @@ void FFTRenderer::InitDescriptors()
 		builder.add_binding(0, VK_DESCRIPTOR_TYPE_STORAGE_IMAGE);
 		builder.add_binding(1, VK_DESCRIPTOR_TYPE_STORAGE_IMAGE);
 		builder.add_binding(2, VK_DESCRIPTOR_TYPE_STORAGE_IMAGE);
-		spectrum_layout = builder.build(engine->_device, VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_FRAGMENT_BIT);
+		spectrum_layout = builder.build(engine->_device, VK_SHADER_STAGE_COMPUTE_BIT);
 	}
 
 	{
 		DescriptorLayoutBuilder builder;
 		builder.add_binding(0, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER);
 		builder.add_binding(1, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER);
+		builder.add_binding(2, VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER);
 		ocean_shading_layout = builder.build(engine->_device, VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_FRAGMENT_BIT);
 	}
 	{
@@ -329,15 +330,16 @@ void FFTRenderer::InitDescriptors()
 void FFTRenderer::BuildOceanMesh()
 {
 	float tex_coord_scale = 2.f;
-	size_t GRID_DIM = surface.grid_dimensions;
-	size_t vertex_count = GRID_DIM + 1;
+	int GRID_DIM = surface.grid_dimensions;
+	int HALF_DIM = GRID_DIM / 2;
+	int vertex_count = GRID_DIM + 1;
 	surface.vertices.resize(vertex_count * vertex_count);
 	surface.indices.resize(GRID_DIM * GRID_DIM * 2 * 3);
 
 	int idx = 0;
-	for (int z = -GRID_DIM / 2; z <= GRID_DIM / 2; ++z)
+	for (int z = -HALF_DIM; z <= HALF_DIM; ++z)
 	{
-		for (int x = -GRID_DIM / 2; x <= GRID_DIM / 2; ++x)
+		for (int x = -HALF_DIM; x <= HALF_DIM; ++x)
 		{
 			surface.vertices[idx].position = glm::vec3(float(x), 0.f, float(z));
 
@@ -464,7 +466,7 @@ void FFTRenderer::InitComputePipelines()
 
 	
 	initial_spectrum_layout_info.pPushConstantRanges = &push_constant;
-	initial_spectrum_layout_info.pushConstantRangeCount = 0;
+	initial_spectrum_layout_info.pushConstantRangeCount = 1;
 
 	VK_CHECK(vkCreatePipelineLayout(engine->_device, &initial_spectrum_layout_info, nullptr, &initial_spectrum_pso.layout));
 
@@ -576,12 +578,6 @@ void FFTRenderer::InitDefaultData()
 		vkDestroySampler(engine->_device, cubeMapSampler, nullptr);
 		});
 }
-
-void FFTRenderer::BuildOceanMesh()
-{
-
-}
-
 
 void FFTRenderer::CreateSwapchain(uint32_t width, uint32_t height)
 {
