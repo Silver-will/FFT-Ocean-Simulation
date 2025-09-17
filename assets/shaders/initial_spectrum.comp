@@ -49,7 +49,7 @@ void main()
 	float Lpm = exp(-1.25 * square(kp / k));
 	float gamma = 1.7;
 	float sigma = 0.08 * (1.0 + 4.0 * pow(Omega, -3.0));
-	float Gamma = exp(-square(sqrt(k / kp) - 1.0) / 2.0 * square(sigma));
+	float Gamma =  exp(-square(sqrt(k/kp) - 1.0) / (2.0 * square(sigma)));
 	float Jp = pow(gamma, Gamma);
 	float Fp = Lpm * Jp * exp(-Omega / sqrt(10.0) * (sqrt(k / kp) - 1.0));
 	float alphap = 0.006 * sqrt(Omega);
@@ -75,4 +75,5 @@ void main()
 	if (wave_vector.x == 0.0 && wave_vector.y == 0.0) h = 0.f;
 
 	imageStore(inital_spectrum, pixel_coord, vec4(h, 0.f, 0.f, 0.f));
+	//imageStore(inital_spectrum, pixel_coord, vec4(float(PushConstants.ocean_size), 0.f, 0.f, 0.f));
 }

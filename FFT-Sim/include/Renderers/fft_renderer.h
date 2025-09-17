@@ -4,9 +4,23 @@
 #include "base_renderer.h"
 #include "../vk_engine.h"
 
-struct HeightSimParams {
-	uint32_t resolution;
+
+struct FFTSceneData {
+	glm::vec3 world_camera_pos;
+	int show_wireframe;
+	glm::vec3 sun_direction;
+	int padding;
 };
+struct HeightSimParams {
+	float wind_angle = 45.f;
+	float wind_magnitude = 14.142135f;
+	int sun_elevation = 0.f;
+	int sun_azimuth = 90.f;
+	bool wireframe;
+	bool changed = true;
+	bool is_ping_phase = true;
+};
+
 struct FFTParams {
 	uint32_t resolution;
 	uint32_t ocean_size;
@@ -50,11 +64,15 @@ struct FFTRenderer : public BaseRenderer
 	void LoadAssets() override;
 	void InitImgui() override;
 
-	void Trace(VkCommandBuffer cmd);
+	void DrawMain(VkCommandBuffer cmd);
 	void DrawBackground(VkCommandBuffer cmd);
 	void DrawPostProcess(VkCommandBuffer cmd);
 	void DrawImgui(VkCommandBuffer cmd, VkImageView targetImageView);
 	void BuildOceanMesh();
+	void GenerateInitialSpectrum(VkCommandBuffer cmd);
+	void PingPongPhasePass(VkCommandBuffer cmd);
+	void GenerateSpectrum(VkCommandBuffer cmd);
+	void DebugComputePass(VkCommandBuffer cmd);
 
 	void ConfigureRenderWindow();
 	void InitEngine();
@@ -86,7 +104,7 @@ private:
 	VkDescriptorSetLayout initial_spectrum_layout;
 	VkDescriptorSetLayout image_blit_layout;
 	VkDescriptorSetLayout ocean_shading_layout;
-
+	std::vector<VkImageMemoryBarrier> image_barriers;
 
 	Camera main_camera;
 	std::shared_ptr<ResourceManager> resource_manager;
@@ -109,7 +127,6 @@ private:
 	BlackKey::FrameData _frames[FRAME_OVERLAP];
 	BlackKey::FrameData& get_current_frame() { return _frames[_frameNumber % FRAME_OVERLAP]; };
 
-
 	bool resize_requested = false;
 	bool _isInitialized{ false };
 	int _frameNumber{ 0 };
@@ -117,6 +134,7 @@ private:
 	bool use_bindless = true;
 	bool debugBuffer = false;
 	bool readDebugBuffer = false;
+	bool debug_texture = false;
 
 	struct {
 		float lastFrame;
@@ -150,6 +168,7 @@ private:
 	PipelineStateObject initial_spectrum_pso;
 	PipelineStateObject spectrum_pso;
 	PipelineStateObject phase_pso;
+	PipelineStateObject debug_pso;
 	GPUSceneData scene_data;
 
 	AllocatedImage white_image;
@@ -162,6 +181,11 @@ private:
 	VkSampler defaultSamplerLinear;
 	VkSampler defaultSamplerNearest;
 	VkSampler cubeMapSampler;
+	VkSampler samplerLinear;
+
+	FFTParams ocean_params;
+	HeightSimParams sim_params;
+	FFTSceneData fft_scene_data;
 
 	EngineStats stats;
 	std::vector<VkBufferMemoryBarrier> compute_barriers;

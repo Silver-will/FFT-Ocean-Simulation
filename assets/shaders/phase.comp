@@ -31,6 +31,7 @@ void main()
 {
     ivec2 pixel_coord = ivec2(gl_GlobalInvocationID.xy);
 
+    ivec2 img_size = imageSize(phases);
     float n = (pixel_coord.x < 0.5f * PushConstants.resolution) ? pixel_coord.x : pixel_coord.x - PushConstants.resolution;
 	float m = (pixel_coord.y < 0.5f * PushConstants.resolution) ? pixel_coord.y : pixel_coord.y - PushConstants.resolution;
 
@@ -42,7 +43,15 @@ void main()
 
     float delta_phase = omega(k) * PushConstants.delta_time * slowdown_factor;
     float phase = imageLoad(phases, pixel_coord).r;
-    phase = mod(phase + delta_phase, 2.f * PI);
+    if(phase > 0.f && phase < 6.7f)
+        phase = phase;
+    else
+        phase = 0.2f;
+    //phase = mod(phase + delta_phase, 2.f * PI);
 
-    imageStore(delta_phases, pixel_coord, vec4(phase, 0.f, 0.f, 0.f));
+    if(pixel_coord.x < img_size.x && pixel_coord.y < img_size.y)
+    {
+        imageStore(delta_phases, pixel_coord, vec4(phase, 0.f, 0.f, 0.f));
+    }
+    
 }

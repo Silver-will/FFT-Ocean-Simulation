@@ -37,7 +37,7 @@ struct ResourceManager
 	std::optional<AllocatedImage> LoadImage(std::string_view filePath, VkFormat format = VK_FORMAT_R8G8B8A8_UNORM);
 	AllocatedBuffer CreateAndUpload(size_t allocSize, VkBufferUsageFlags usage, VmaMemoryUsage memoryUsage, void* data);
 	AllocatedImage CreateImage(VkExtent3D size, VkFormat format, VkImageUsageFlags usage, bool mipmapped = false);
-	AllocatedImage CreateImage(void* data, VkExtent3D size, VkFormat format, VkImageUsageFlags usage, bool mipmapped = false);
+	AllocatedImage CreateImage(void* data, VkExtent3D size, VkFormat format, VkImageUsageFlags usage,uint32_t byte_size = 4, bool mipmapped = false);
 	GPUMeshBuffers UploadMesh(std::span<uint32_t> indices, std::span<Vertex> vertices);
 	AllocatedImage CreateImageEmpty(VkExtent3D size, VkFormat format, VkImageUsageFlags usage, VkImageViewType viewType, bool mipmapped, int layers, VkSampleCountFlagBits msaaSamples = VK_SAMPLE_COUNT_1_BIT, int mipLevels = -1);
 	void DestroyImage(const AllocatedImage& img);

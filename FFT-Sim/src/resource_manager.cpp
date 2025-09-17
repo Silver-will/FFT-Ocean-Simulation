@@ -37,7 +37,7 @@ void ResourceManager::init(VulkanEngine* engine_ptr) {
     }
 
     errorCheckerboardImage = CreateImage(pixels.data(), VkExtent3D{ 16, 16, 1 }, VK_FORMAT_R8G8B8A8_UNORM,
-        VK_IMAGE_USAGE_SAMPLED_BIT, this);
+        VK_IMAGE_USAGE_SAMPLED_BIT);
 
     VkSamplerCreateInfo sampl = { .sType = VK_STRUCTURE_TYPE_SAMPLER_CREATE_INFO };
 
@@ -118,7 +118,7 @@ ResourceManager::ResourceManager(VulkanEngine* engine)
     }
 
     errorCheckerboardImage = CreateImage(pixels.data(), VkExtent3D{ 16, 16, 1 }, VK_FORMAT_R8G8B8A8_UNORM,
-        VK_IMAGE_USAGE_SAMPLED_BIT, this);
+        VK_IMAGE_USAGE_SAMPLED_BIT);
 
     VkSamplerCreateInfo sampl = { .sType = VK_STRUCTURE_TYPE_SAMPLER_CREATE_INFO };
 
@@ -372,9 +372,10 @@ AllocatedImage ResourceManager::CreateImageEmpty(VkExtent3D size, VkFormat forma
 }
 
 
-AllocatedImage ResourceManager::CreateImage(void* data, VkExtent3D size, VkFormat format, VkImageUsageFlags usage, bool mipmapped)
+AllocatedImage ResourceManager::CreateImage(void* data, VkExtent3D size, VkFormat format, VkImageUsageFlags usage,uint32_t byte_size, bool mipmapped)
 {
-    size_t data_size = size.depth * size.width * size.height * 4;
+    //Always assumes the texture is 4 components large
+    size_t data_size = size.depth * size.width * size.height * byte_size;
     AllocatedBuffer uploadbuffer = CreateBuffer(data_size, VK_BUFFER_USAGE_TRANSFER_SRC_BIT, VMA_MEMORY_USAGE_CPU_TO_GPU);
 
     memcpy(uploadbuffer.info.pMappedData, data, data_size);
