@@ -1,0 +1,87 @@
+#version 460
+layout(local_size_x = 32, local_size_y = 32, local_size_z = 1)in;
+
+layout(set = 0, binding = 0,rgba32f) uniform image2D initial_spectrum;
+layout(set = 0, binding = 1,rgba32f)uniform image2D wave_texture;
+
+layout(set = 0, binding = 2,rgba32f)uniform writeonly image2D frequency_domain;
+layout(set = 0, binding = 3,rgba32f)uniform writeonly image2D height_derivative;
+layout(set = 0, binding = 4,rgba32f)uniform writeonly image2D horizontal_displacement;
+layout(set = 0, binding = 5,rgba32f)uniform writeonly image2D jacobian_XxZz_map;
+layout(set = 0, binding = 6,rg32f)uniform writeonly image2D jacobian_xz_map;
+
+layout( push_constant ) uniform constants
+{
+	int resolution;
+	int ocean_size;
+	vec2 wind; //x-speed y-angle
+	float delta_time;
+	float choppiness;
+	int total_count;
+	int subseq_count;
+    float fetch;
+    float swell;
+    float depth;
+    int ping_pong;
+} PushConstants;
+
+
+vec2 EulerFormula(float x)
+{
+    return vec2(cos(x), sin(x));
+}
+
+vec2 ComplexMult(vec2 a, vec2 b)
+{
+    vec2 result;
+    result.x = a.x * b.x - a.y * b.y;
+    result.y = a.x * b.y + a.y * b.x;
+    return result;
+}
+
+void main()
+{
+    ivec2 Size = imageSize(initial_spectrum);
+    ivec2 pixel_coord = ivec2(gl_GlobalInvocationID.xy);
+
+    if(pixel_coord.x < Size.x && pixel_coord.y < Size.y)
+    {
+        vec4 full_h = imageLoad(initial_spectrum, pixel_coord).rgba;
+        // init spectrum
+        vec2 h_0 = full_h.rg;
+        // conjugate init spectrum
+        vec2 h_1 = full_h.zw;
+        // w(k)
+        vec4 full_wave = imageLoad(wave_texture, pixel_coord).rgba;
+        float dispertion = full_wave.z;
+        vec2 k =  full_wave.xy;
+        float oneOverKLength = 1 / length(k);
+    
+         // real time
+        float phase = dispertion * PushConstants.delta_time;
+        vec2 exponent_0 = EulerFormula(phase);
+        vec2 exponent_1 = EulerFormula(-phase);
+    
+        vec2 firstPart = ComplexMult(h_0, exponent_0);
+        vec2 secondPart = ComplexMult(h_1, exponent_1);
+        vec2 h = firstPart + secondPart;
+        vec2 ih = vec2(-h.y, h.x);
+    
+        vec2 tangent = ih * k.x;
+        vec2 bitangent = ih * k.y;
+    
+        vec2 displacementX = oneOverKLength * k.x * ih;
+        vec2 displacementZ = oneOverKLength * k.y * ih;
+
+        // foam
+        vec2 j_xx = oneOverKLength * k.x * k.x * -h;
+        vec2 j_zz = oneOverKLength * k.y * k.y * -h;
+        vec2 j_xz = oneOverKLength * k.x * k.y * -h;
+    
+        imageStore(frequency_domain, pixel_coord, vec4(h.xy, h.xy));
+        imageStore(height_derivative, pixel_coord, vec4(tangent.x, tangent.y, bitangent.x, bitangent.y));
+        imageStore(horizontal_displacement, pixel_coord, vec4(displacementX.xy, displacementZ.xy));
+        imageStore(jacobian_XxZz_map, pixel_coord, vec4(j_xx.xy, j_zz.xy));
+        imageStore(jacobian_xz_map, pixel_coord, vec4(j_xz.xy, 0.f,0.f));
+    }
+}

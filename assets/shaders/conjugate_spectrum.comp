@@ -1,0 +1,14 @@
+#version 460
+layout(local_size_x = 32, local_size_y = 32, local_size_z = 1)in;
+layout(set = 0, binding = 0,rg32f) readonly uniform image2D initial_spectrum;
+layout(set = 0, binding = 1,rgba32f) writeonly uniform image2D conjugated_spectrum;
+
+
+void main()
+{
+    ivec2 Size = imageSize(initial_spectrum);
+    ivec2 pixel_coord = ivec2(gl_GlobalInvocationID.xy);
+	vec2 h_0 = imageLoad(initial_spectrum, pixel_coord).rg;
+    vec2 h_minus_k = imageLoad(initial_spectrum, ivec2((Size.x - pixel_coord.x) % Size.x,(Size.y - pixel_coord.y) % Size.y)).rg;
+    imageStore(conjugated_spectrum, pixel_coord, vec4(h_0.x,h_0.y,h_minus_k.x,-h_minus_k.y));
+}

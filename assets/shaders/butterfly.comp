@@ -1,0 +1,86 @@
+#version 460 core
+layout(local_size_x = 1, local_size_y = 8, local_size_z = 1) in;
+
+layout(binding = 0, rgba32f) uniform writeonly image2D butterfly_texture;
+
+
+const float PI = 3.14159265359;
+const float g = 9.81; 
+
+layout( push_constant ) uniform constants
+{
+	int resolution;
+	int ocean_size;
+	vec2 wind; //x-speed y-angle
+	float delta_time;
+	float choppiness;
+	int total_count;
+	int log_size;
+    float fetch;
+    float swell;
+    float depth;
+    int ping_pong;
+} PushConstants;
+
+
+vec2 EulerFormula(float x)
+{
+    return vec2(cos(x), sin(x));
+}
+
+vec2 ComplexMult(vec2 a, vec2 b)
+{
+    return vec2(a.x * b.x - a.y * b.y, a.x * b.y + a.y * b.x);
+}
+
+// ref: https://stackoverflow.com/questions/746171/efficient-algorithm-for-bit-reversal-from-msb-lsb-to-lsb-msb-in-c
+uint BitReverse(uint x)
+{
+    uint n = 0;
+    uint mask = 0x1;
+    
+    for (int i=0; i < PushConstants.log_size; i++)
+    {
+        n <<= 1;
+        n |= x & mask;
+        x >>= 1;
+    }
+    
+    return n;
+}
+
+void main()
+{
+    ivec2 pixel_coord = ivec2(gl_GlobalInvocationID.xy);
+    int Size = PushConstants.resolution;
+      // k value
+    float k = mod(pixel_coord.y * (float(Size) / pow(2, pixel_coord.x + 1)), Size);
+    // twiddle factor
+    vec2 twiddle = EulerFormula(2 * PI * k / Size);
+
+    const float butterflyStep = pow(2, pixel_coord.x);
+    // To determine if the butterfly is in the top or bottom half
+    float butterflyWing;
+
+    if(mod(pixel_coord.y, pow(2, pixel_coord.x + 1)) < pow(2, pixel_coord.x))
+        butterflyWing = 1;
+    else
+        butterflyWing = -1;
+
+    uint y1 = uint(pixel_coord.y);
+    uint y2 = uint(pixel_coord.y);
+
+    // Offset the y values based on the butterfly wing and step
+    if(butterflyWing == 1)
+        y2 += uint(butterflyStep);
+    else
+        y1 -= uint(butterflyStep);
+    
+    if(pixel_coord.x == 0)
+    {
+        y1 = BitReverse(y1);
+        y2 = BitReverse(y2);
+    }
+
+    imageStore(butterfly_texture, pixel_coord, vec4(twiddle, y1,y2));
+}

@@ -4,7 +4,6 @@
 #include "base_renderer.h"
 #include "../vk_engine.h"
 
-
 struct FFTSceneData {
 	glm::vec3 world_camera_pos;
 	int show_wireframe;
@@ -19,16 +18,22 @@ struct HeightSimParams {
 	bool wireframe;
 	bool changed = true;
 	bool is_ping_phase = true;
+	bool use_temp_texture = true;
 };
 
 struct FFTParams {
-	uint32_t resolution;
-	uint32_t ocean_size;
+	int resolution;
+	int ocean_size;
 	glm::vec2 wind;
 	float delta_time;
-	float choppiness;
-	uint32_t total_count;
-	uint32_t subseq_count;
+	float choppiness = 1.5f;
+	int total_count;
+	int log_size;
+	float fetch;
+	float swell;
+	float depth;
+	int stage;
+	int ping_pong_count;
 };
 struct OceanVertex {
 	glm::vec3 position;
@@ -38,17 +43,28 @@ struct OceanVertex {
 struct OceanSurface {
 	std::vector<OceanVertex> vertices;
 	std::vector<uint32_t> indices;
-	AllocatedImage displacement_map;
+	
+	GPUMeshBuffers mesh_data;
 
 	uint32_t grid_dimensions = 1024;
 	uint32_t texture_dimensions = 512;
 
 	AllocatedImage spectrum_texture;
-	AllocatedImage temp_texture;
+	AllocatedImage frequency_domain_texture;
+	AllocatedImage height_derivative_texture;
+	AllocatedImage horizontal_displacement_map;
+	AllocatedImage jacobian_XxZz_map;
+	AllocatedImage jacobian_xz_map;
+	AllocatedImage ping_1;
+	AllocatedImage butterfly_texture;
 	AllocatedImage inital_spectrum_texture;
 	AllocatedImage normal_map;
+	AllocatedImage gaussian_noise_texture;
+	AllocatedImage wave_texture;
+	AllocatedImage conjugated_spectrum_texture;
 	AllocatedImage ping_phase_texture;
 	AllocatedImage pong_phase_texture;
+	AllocatedImage height_map;
 };
 struct FFTRenderer : public BaseRenderer
 {
@@ -69,10 +85,15 @@ struct FFTRenderer : public BaseRenderer
 	void DrawPostProcess(VkCommandBuffer cmd);
 	void DrawImgui(VkCommandBuffer cmd, VkImageView targetImageView);
 	void BuildOceanMesh();
+	void GenerateWaves();
 	void GenerateInitialSpectrum(VkCommandBuffer cmd);
 	void PingPongPhasePass(VkCommandBuffer cmd);
 	void GenerateSpectrum(VkCommandBuffer cmd);
 	void DebugComputePass(VkCommandBuffer cmd);
+	void FFTGenerationPass(VkCommandBuffer cmd);
+	void GenerateNormalMap(VkCommandBuffer cmd);
+	void PreProcessComputePass();
+	void DoIFFT(VkCommandBuffer cmd, AllocatedImage* input = nullptr, AllocatedImage* output = nullptr);
 
 	void ConfigureRenderWindow();
 	void InitEngine();
@@ -101,12 +122,13 @@ private:
 
 	VkDescriptorSetLayout skybox_descriptor_layout;
 	VkDescriptorSetLayout spectrum_layout;
-	VkDescriptorSetLayout initial_spectrum_layout;
+	VkDescriptorSetLayout butterfly_layout;
 	VkDescriptorSetLayout image_blit_layout;
 	VkDescriptorSetLayout ocean_shading_layout;
 	VkDescriptorSetLayout debug_layout;
+	VkDescriptorSetLayout fft_layout;
 	std::vector<VkImageMemoryBarrier> image_barriers;
-
+	
 	Camera main_camera;
 	std::shared_ptr<ResourceManager> resource_manager;
 	std::shared_ptr<SceneManager> scene_manager;
@@ -167,10 +189,30 @@ private:
 	PipelineStateObject fft_vertical_pso;
 	PipelineStateObject normal_calculation_pso;
 	PipelineStateObject initial_spectrum_pso;
+	PipelineStateObject conjugate_spectrum_pso;
 	PipelineStateObject spectrum_pso;
 	PipelineStateObject phase_pso;
 	PipelineStateObject debug_pso;
+	PipelineStateObject copy_pso;
+	PipelineStateObject permute_scale_pso;
+	PipelineStateObject butterfly_pso;
 	GPUSceneData scene_data;
+
+	
+	int planeLength = 10;
+	int waveCount = 4;
+	float medianWavelength = 1.0f;
+	float wavelengthRange = 1.0f;
+	float medianDirection = 0.0f;
+	float directionalRange = 30.0f;
+	float medianAmplitude = 1.0f;
+	float medianSpeed = 1.0f;
+	float speedRange = 0.1f;
+	float steepness = 0.0f;
+
+	// FBM Settings
+	int vertexWaveCount = 8;
+	int fragmentWaveCount = 40;
 
 	AllocatedImage white_image;
 	AllocatedImage black_image;

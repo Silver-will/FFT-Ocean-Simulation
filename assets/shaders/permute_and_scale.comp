@@ -1,0 +1,21 @@
+#version 460 core
+layout(local_size_x = 32, local_size_y = 32, local_size_z = 1) in;
+
+
+layout(set = 0, binding = 0, rgba32f) uniform writeonly image2D ping0;
+layout(set = 0, binding = 1, rgba32f) uniform readonly image2D ping1;
+
+void main()
+{
+    ivec2 pixel_coord = ivec2(gl_GlobalInvocationID.xy);
+    float perms[] = {-1, 1};
+    uint index = int((pixel_coord.x + pixel_coord.y) % 2);
+    float perm = perms[index];
+    
+    // float h = perm * (PingPong1[id.xy].x / float(Size * Size));
+    vec4 h = imageLoad(ping1, pixel_coord);
+    float h1 = perm * h.x;
+    float h2 = perm * h.z;
+    
+    imageStore(ping0, pixel_coord, vec4(h1,h2,0,1));
+}

@@ -2,15 +2,16 @@
 layout(local_size_x = 32, local_size_y = 32, local_size_z = 1)in;
 layout(set = 0, binding = 0,r32f) writeonly uniform image2D inital_spectrum;
 
+
 layout( push_constant ) uniform constants
 {
-	uint resolution;
-	uint ocean_size;
+	int resolution;
+	int ocean_size;
 	vec2 wind;
 	float delta_time;
 	float choppiness;
-	uint total_count;
-	uint subseq_count;
+	int total_count;
+	int subseq_count;
 } PushConstants;
 
 const float PI = 3.14159265359;
@@ -29,11 +30,35 @@ float square(float x)
 	return x * x;
 }
 
+/*
+float phillipsSpectrum2D(vec2 k)
+{
+    if(length(k) < 0.0001) {
+        return 0.0;
+    }
+
+    float A = 1.0;
+    vec2 windDir = vec2(cos(wind.y), sin(wind.y));
+
+    float L = wind.x * wind.x / g;
+    float k2 = dot(k, k);
+    float kL2 = k2 * L * L;
+    float k4 = k2 * k2;
+    float kw2 = dot(normalize(k), normalize(windDir));
+    kw2 *= kw2;
+
+    float l = PushConstants.smallWaveLengthCutoff;
+    float cutoff = exp(-k2 * l * l);
+
+    return A * exp(-1.0 / kL2) * kw2 * cutoff / k4;
+}
+*/
+
 void main()
 {
 	ivec2 pixel_coord = ivec2(gl_GlobalInvocationID.xy);
-	float n = (pixel_coord.x < 0.5f * PushConstants.resolution) ? pixel_coord.x : pixel_coord.x - PushConstants.resolution;
-	float m = (pixel_coord.y < 0.5f * PushConstants.resolution) ? pixel_coord.y : pixel_coord.y - PushConstants.resolution;
+	float n = pixel_coord.x - (PushConstants.resolution / 2.0);
+	float m = pixel_coord.y - (PushConstants.resolution / 2.0);
 
 	vec2 wave_vector = (2.f * PI * vec2(n, m)) / PushConstants.ocean_size;
 	float k = length(wave_vector);
@@ -76,4 +101,24 @@ void main()
 
 	imageStore(inital_spectrum, pixel_coord, vec4(h, 0.f, 0.f, 0.f));
 	//imageStore(inital_spectrum, pixel_coord, vec4(float(PushConstants.ocean_size), 0.f, 0.f, 0.f));
+	
+
+	/*
+	ivec2 pixel_coord = ivec2(gl_GlobalInvocationID.xy);
+	float deltaK = 2.0 * PI / params.resolution;
+	float n = pixel_coord.x - PushConstants.resolution / 2.0;
+	float m = pixel_coord.y - PushConstants.resolution / 2.0;
+
+	let k = vec2(n, m) * deltaK;
+
+	vec2 noise_k = imageLoad(noise_texture, pixel_coord).xy;
+    vec2 h0_k = noise_k * sqrt(phillipsSpectrum2D(k) / 2.0);
+
+    vec2 noise_minus_k = imageLoad(noise_texture, vec2(PushConstants.resolution) - pixel_coord).xy;
+    vec2 h0_minus_k = noise_minus_k * sqrt(phillipsSpectrum2D(-k) / 2.0);
+    vec2 h0_minus_k_conj = vec2(h0_minus_k.x, -h0_minus_k.y);
+
+	imageStore(inital_spectrum, pixel_coord, vec4(h0_k, h0_minus_k_conj));
+	float k = length(wave_vector);
+	*/
 }

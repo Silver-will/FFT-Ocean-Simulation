@@ -6,13 +6,13 @@ layout(set = 0, binding = 1,r32f) writeonly uniform image2D delta_phases;
 
 layout( push_constant ) uniform constants
 {
-	uint resolution;
-	uint ocean_size;
+	int resolution;
+	int ocean_size;
 	vec2 wind;
 	float delta_time;
 	float choppiness;
-	uint total_count;
-	uint subseq_count;
+	int total_count;
+	int subseq_count;
 } PushConstants;
 
 

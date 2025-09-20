@@ -1,0 +1,18 @@
+#version 460 core
+
+layout(local_size_x = 32, local_size_y = 32, local_size_z = 1) in;
+
+layout(set = 0, binding = 0, rgba32f) uniform readonly image2D ping0;
+layout(set = 0, binding = 1, rgba32f) uniform writeonly image2D ping1;
+
+void main()
+{
+	ivec2 pos = ivec2(gl_GlobalInvocationID.xy);
+	ivec2 size = imageSize(ping0);
+
+	if(pos.x < size.x && pos.y < size.y)
+	{
+		vec4 value = imageLoad(ping0, pos);
+		imageStore(ping1, pos, value);
+	}
+}
