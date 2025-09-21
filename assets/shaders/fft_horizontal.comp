@@ -1,5 +1,5 @@
 #version 460 core
-
+#extension GL_EXT_debug_printf : require
 layout(local_size_x = 32, local_size_y = 32, local_size_z = 1) in;
 
 layout(binding = 0, rgba32f) uniform image2D ping0;
@@ -27,6 +27,19 @@ vec2 ComplexMult(vec2 a, vec2 b)
     return vec2(a.x * b.x - a.y * b.y, a.x * b.y + a.y * b.x);
 }
 
+/*
+void ButterflyValues(uint step, uint index, out uint2 indices, out vec2 twiddle) {
+    const float twoPi = 6.28318530718;
+    uint b = SIZE >> (step + 1);
+    uint w = b * (index / b);
+    uint i = (w + index) % SIZE;
+    sincos(-twoPi / SIZE * w, twiddle.y, twiddle.x);
+
+    //This is what makes it the inverse FFT
+    twiddle.y = -twiddle.y;
+    indices = uint2(i, i + b);
+}
+*/
 
 void main()
 {
@@ -34,7 +47,9 @@ void main()
     ivec2 size = imageSize(ping0);
 
 	vec4 butterflyData = imageLoad(butterfly_texture, ivec2(PushConstants.stage, pixel_coord.x));
-    const vec2 twiddle = butterflyData.xy;
+    //ButterflyValues(PushConsta)
+    vec2 twiddle = butterflyData.xy;
+    //twiddle = abs(twiddle);
     
     vec2 topSignal1;
     vec2 topSignal2;
@@ -58,8 +73,12 @@ void main()
         h1 = topSignal1 + ComplexMult(twiddle, bottomSignal1);
         h2 = topSignal2 + ComplexMult(twiddle, bottomSignal2);
     
+        //debugPrintfEXT("bottom = %v4f", bottom);
+    
         imageStore(ping1,pixel_coord, vec4(h1.xy,h2.xy));
-    }
+        //imageStore(ping1,pixel_coord, bottom);
+   
+   }
     else
     {
         
@@ -74,7 +93,11 @@ void main()
         // butterfly operation
         h1 = topSignal1 + ComplexMult(twiddle, bottomSignal1);
         h2 = topSignal2 + ComplexMult(twiddle, bottomSignal2);
-    
+        
+        vec4 val = imageLoad(ping1, pixel_coord);
+        imageStore(ping0,pixel_coord, val);
+
         imageStore(ping0,pixel_coord, vec4(h1.xy,h2.xy));
+        //imageStore(ping0,pixel_coord, vec4(1.0f,0.0f,0.0,0.0f));
     }
 }

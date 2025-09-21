@@ -34,6 +34,9 @@ struct FFTParams {
 	float depth;
 	int stage;
 	int ping_pong_count;
+	float displacement_factor = 0.9f;
+	float foam_intensity;
+	float foam_decay;
 };
 struct OceanVertex {
 	glm::vec3 position;
@@ -49,7 +52,7 @@ struct OceanSurface {
 	uint32_t grid_dimensions = 1024;
 	uint32_t texture_dimensions = 512;
 
-	AllocatedImage spectrum_texture;
+	AllocatedImage height_derivative;
 	AllocatedImage frequency_domain_texture;
 	AllocatedImage height_derivative_texture;
 	AllocatedImage horizontal_displacement_map;
@@ -62,9 +65,9 @@ struct OceanSurface {
 	AllocatedImage gaussian_noise_texture;
 	AllocatedImage wave_texture;
 	AllocatedImage conjugated_spectrum_texture;
-	AllocatedImage ping_phase_texture;
-	AllocatedImage pong_phase_texture;
+	AllocatedImage horizontal_map;
 	AllocatedImage height_map;
+	AllocatedImage displacement_map;
 };
 struct FFTRenderer : public BaseRenderer
 {
@@ -85,14 +88,14 @@ struct FFTRenderer : public BaseRenderer
 	void DrawPostProcess(VkCommandBuffer cmd);
 	void DrawImgui(VkCommandBuffer cmd, VkImageView targetImageView);
 	void BuildOceanMesh();
-	void GenerateWaves();
+	void DrawOceanMesh(VkCommandBuffer cmd);
 	void GenerateInitialSpectrum(VkCommandBuffer cmd);
 	void PingPongPhasePass(VkCommandBuffer cmd);
 	void GenerateSpectrum(VkCommandBuffer cmd);
 	void DebugComputePass(VkCommandBuffer cmd);
 	void FFTGenerationPass(VkCommandBuffer cmd);
-	void GenerateNormalMap(VkCommandBuffer cmd);
 	void PreProcessComputePass();
+	void WrapSpectrum(VkCommandBuffer cmd);
 	void DoIFFT(VkCommandBuffer cmd, AllocatedImage* input = nullptr, AllocatedImage* output = nullptr);
 
 	void ConfigureRenderWindow();
@@ -126,6 +129,7 @@ private:
 	VkDescriptorSetLayout image_blit_layout;
 	VkDescriptorSetLayout ocean_shading_layout;
 	VkDescriptorSetLayout debug_layout;
+	VkDescriptorSetLayout wrap_spectrum_layout;
 	VkDescriptorSetLayout fft_layout;
 	std::vector<VkImageMemoryBarrier> image_barriers;
 	
@@ -190,6 +194,7 @@ private:
 	PipelineStateObject normal_calculation_pso;
 	PipelineStateObject initial_spectrum_pso;
 	PipelineStateObject conjugate_spectrum_pso;
+	PipelineStateObject wrap_spectrum_pso;
 	PipelineStateObject spectrum_pso;
 	PipelineStateObject phase_pso;
 	PipelineStateObject debug_pso;

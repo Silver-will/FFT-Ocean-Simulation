@@ -1,0 +1,63 @@
+#version 460 core
+
+layout(local_size_x = 32, local_size_y = 32, local_size_z = 1) in;
+
+layout(set = 0, binding = 0, rgba32f) uniform readonly image2D height_derivative;
+layout(set = 0, binding = 1, rgba32f) uniform readonly image2D height_map;
+layout(set = 0, binding = 2, rgba32f) uniform readonly image2D horizontal_displacement_map;
+//layout(set = 0, binding = 3, rgba32f) uniform readonly image2D jacobian_XxZz_map;
+//layout(set = 0, binding = 4, rg32f) uniform readonly image2D jacobian_xz_map;
+
+//layout(set = 0, binding = 3, rgba32f) uniform writeonly image2D normal_map;
+layout(set = 0, binding = 3, rgba32f) uniform writeonly image2D displacement_map;
+//layout(set = 0, binding = 7, rgba32f) uniform image2D foam_map;
+
+
+layout( push_constant ) uniform constants
+{
+	int resolution;
+	int ocean_size;
+	vec2 wind; //x-speed y-angle
+	float delta_time;
+	float choppiness;
+	int total_count;
+	int log_size;
+    float fetch;
+    float swell;
+    float depth;
+    int stage;
+    int ping_pong;
+	float displacement_factor;
+	float foam_intensity;
+	float foam_decay;
+} PushConstants;
+
+void main()
+{
+    ivec2 pixel_coord = ivec2(gl_GlobalInvocationID.xy);
+   // ivec2 size = imageSize(ping0);
+
+    vec2 height_d = imageLoad(height_derivative, pixel_coord).rg;
+	float tangent = height_d.x;
+    float bitangent = height_d.y;
+    // float3 normal = normalize(float3(-tangent, 1, -bitangent));
+
+    //vec2 jacob = imageLoad(jacobian_XxZz_map, pixel_coord).rg;
+    //float j_xx = jacob.x;
+    //float j_zz = jacob.y;
+    //float j_xz = PushConstants.displacement_factor * imageLoad(jacobian_xz_map, pixel_coord).r;
+    //float jacobian = j_xx * j_zz - j_xz * j_xz;
+    //jacobian *= -1;
+    //jacobian += PushConstants.foam_intensity;
+    
+    // Foam Accumulation
+    //vec2 foam_v = imageLoad(foam_map, pixel_coord).rg;
+    //float accumulation = foam_v.x - PushConstants.foam_decay * PushConstants.delta_time / max(jacobian, 0.5);
+    //float foam = max(accumulation, jacobian);
+
+    vec2 horizontal_displacement = imageLoad(horizontal_displacement_map, pixel_coord).rg;
+    vec2 height = imageLoad(height_map, pixel_coord).rg;
+    //imageStore(normal_map, pixel_coord, vec4(tangent, bitangent, 0, 1));
+    imageStore(displacement_map, pixel_coord, vec4(PushConstants.displacement_factor * horizontal_displacement.x, height.x, PushConstants.displacement_factor *  horizontal_displacement.y,1));
+    //imageStore(foam_map, pixel_coord, vec4(foam,foam,foam,1));
+}

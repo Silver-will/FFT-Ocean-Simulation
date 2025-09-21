@@ -72,17 +72,14 @@ void FFTRenderer::PreProcessComputePass()
 			writer.write_image(0, surface.butterfly_texture.imageView,defaultSamplerLinear,VK_IMAGE_LAYOUT_GENERAL, VK_DESCRIPTOR_TYPE_STORAGE_IMAGE);
 			writer.update_set(engine->_device, butterFlyDescriptor);
 
-			clusterParams clusterData;
-			clusterData.zNear = main_camera.getNearClip();
-			clusterData.zFar = main_camera.getFarClip();
+			
 			vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, butterfly_pso.pipeline);
 
 			vkCmdBindDescriptorSets(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, butterfly_pso.layout, 0, 1, &butterFlyDescriptor, 0, nullptr);
 
-			vkCmdPushConstants(cmd, butterfly_pso.layout, VK_SHADER_STAGE_COMPUTE_BIT, 0, sizeof(FFTParams), &clusterData);
-			vkCmdDispatch(cmd, ocean_params.log_size, surface.texture_dimensions / 8, 1);
-			vkutil::transition_image(cmd, surface.butterfly_texture.image, VK_IMAGE_LAYOUT_GENERAL, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);
-		});
+			vkCmdPushConstants(cmd, butterfly_pso.layout, VK_SHADER_STAGE_COMPUTE_BIT, 0, sizeof(FFTParams), &ocean_params);
+			vkCmdDispatch(cmd, ocean_params.log_size, (surface.texture_dimensions / 8), 1);
+			});
 }
 void FFTRenderer::ConfigureRenderWindow()
 {
@@ -288,6 +285,14 @@ void FFTRenderer::InitDescriptors()
 	{
 		DescriptorLayoutBuilder builder;
 		builder.add_binding(0, VK_DESCRIPTOR_TYPE_STORAGE_IMAGE);
+		builder.add_binding(1, VK_DESCRIPTOR_TYPE_STORAGE_IMAGE);
+		builder.add_binding(2, VK_DESCRIPTOR_TYPE_STORAGE_IMAGE);
+		builder.add_binding(3, VK_DESCRIPTOR_TYPE_STORAGE_IMAGE);
+		wrap_spectrum_layout = builder.build(engine->_device, VK_SHADER_STAGE_COMPUTE_BIT);
+	}
+	{
+		DescriptorLayoutBuilder builder;
+		builder.add_binding(0, VK_DESCRIPTOR_TYPE_STORAGE_IMAGE);
 		butterfly_layout = builder.build(engine->_device, VK_SHADER_STAGE_COMPUTE_BIT);
 	}
 
@@ -413,6 +418,48 @@ void FFTRenderer::BuildOceanMesh()
 			surface.indices[idx++] = (vertex_count * (y + 1)) + x + 1;
 		}
 	}
+
+	//Voxel texture visualization buffer
+	size_t buffer_size = surface.vertices.size() * sizeof(OceanVertex);
+	const size_t indexBufferSize = surface.indices.size() * sizeof(uint32_t);
+	
+	surface.mesh_data.vertexBuffer = resource_manager->CreateBuffer(buffer_size, VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_TRANSFER_SRC_BIT | VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT,
+		VMA_MEMORY_USAGE_GPU_ONLY);
+
+	surface.mesh_data.indexBuffer = resource_manager->CreateBuffer(indexBufferSize, VK_BUFFER_USAGE_INDEX_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_SRC_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT,
+		VMA_MEMORY_USAGE_GPU_ONLY);
+
+	VkBufferDeviceAddressInfo deviceAdressInfo{ .sType = VK_STRUCTURE_TYPE_BUFFER_DEVICE_ADDRESS_INFO,.buffer = surface.mesh_data.vertexBuffer.buffer };
+	surface.mesh_data.vertexBufferAddress = vkGetBufferDeviceAddress(resource_manager->engine->_device, &deviceAdressInfo);
+
+
+	AllocatedBuffer staging = resource_manager->CreateBuffer(buffer_size + indexBufferSize, VK_BUFFER_USAGE_TRANSFER_SRC_BIT, VMA_MEMORY_USAGE_CPU_ONLY);
+
+	void* data = nullptr;
+	vmaMapMemory(resource_manager->engine->_allocator, staging.allocation, &data);
+	// copy vertex buffer
+	memcpy(data, surface.vertices.data(), buffer_size);
+
+	memcpy((char*)data + buffer_size, surface.indices.data(), indexBufferSize);
+
+	resource_manager->engine->immediate_submit([&](VkCommandBuffer cmd) {
+		VkBufferCopy vertexCopy{ 0 };
+		vertexCopy.dstOffset = 0;
+		vertexCopy.srcOffset = 0;
+		vertexCopy.size = buffer_size;
+
+		vkCmdCopyBuffer(cmd, staging.buffer, surface.mesh_data.vertexBuffer.buffer, 1, &vertexCopy);
+
+		VkBufferCopy indexCopy{ 0 };
+		indexCopy.dstOffset = 0;
+		indexCopy.srcOffset = buffer_size;
+		indexCopy.size = indexBufferSize;
+
+		vkCmdCopyBuffer(cmd, staging.buffer, surface.mesh_data.indexBuffer.buffer, 1, &indexCopy);
+		});
+
+	vmaUnmapMemory(resource_manager->engine->_allocator, staging.allocation);
+	resource_manager->DestroyBuffer(staging);
 }
 
 /*
@@ -491,6 +538,27 @@ void FFTRenderer::InitComputePipelines()
 	auto spectrum_compute_pipeline_creation_info = vkinit::compute_pipeline_create_info(spectrum_pso.layout, spectrum_stage_info);
 	
 	VK_CHECK(vkCreateComputePipelines(engine->_device, VK_NULL_HANDLE, 1, &spectrum_compute_pipeline_creation_info, nullptr, &spectrum_pso.pipeline));
+
+
+	auto wrap_spectrum_layout_info = vkinit::pipeline_layout_create_info();
+	wrap_spectrum_layout_info.pSetLayouts = &wrap_spectrum_layout;
+	wrap_spectrum_layout_info.setLayoutCount = 1;
+
+	wrap_spectrum_layout_info.pPushConstantRanges = &push_constant;
+	wrap_spectrum_layout_info.pushConstantRangeCount = 1;
+
+	VK_CHECK(vkCreatePipelineLayout(engine->_device, &wrap_spectrum_layout_info, nullptr, &wrap_spectrum_pso.layout));
+
+	VkShaderModule wrap_spectrum_shader;
+	if (!vkutil::load_shader_module(std::string(assets_path + "/shaders/spectrum_wrapper.spv").c_str(), engine->_device, &wrap_spectrum_shader)) {
+		std::print("Error when building the compute shader \n");
+	}
+
+	auto wrap_spectrum_stage_info = vkinit::pipeline_shader_stage_create_info(VK_SHADER_STAGE_COMPUTE_BIT, wrap_spectrum_shader);
+	auto wrap_spectrum_compute_pipeline_creation_info = vkinit::compute_pipeline_create_info(wrap_spectrum_pso.layout, wrap_spectrum_stage_info);
+
+	VK_CHECK(vkCreateComputePipelines(engine->_device, VK_NULL_HANDLE, 1, &wrap_spectrum_compute_pipeline_creation_info, nullptr, &wrap_spectrum_pso.pipeline));
+
 
 	
 	
@@ -707,16 +775,18 @@ void FFTRenderer::InitDefaultData()
 	{
 		gaussian_noise[i] = distGaus(rng);
 	}
+
+	auto log_size = log2(RES);
 	//stbi_load(std::string(assets_path + "textures/back.png"))
+	surface.displacement_map = resource_manager->CreateImage(VkExtent3D(RES, RES, 1), VK_FORMAT_R32G32B32A32_SFLOAT, VK_IMAGE_USAGE_SAMPLED_BIT | VK_IMAGE_USAGE_STORAGE_BIT);
 	surface.inital_spectrum_texture = resource_manager->CreateImage(VkExtent3D(RES, RES, 1), VK_FORMAT_R32G32_SFLOAT, VK_IMAGE_USAGE_SAMPLED_BIT | VK_IMAGE_USAGE_STORAGE_BIT);
-	surface.ping_phase_texture = resource_manager->CreateImage(ping_phase_array.data(), VkExtent3D(RES, RES, 1), VK_FORMAT_R32_SFLOAT, VK_IMAGE_USAGE_SAMPLED_BIT | VK_IMAGE_USAGE_STORAGE_BIT);
-	surface.pong_phase_texture = resource_manager->CreateImage(VkExtent3D(RES, RES, 1), VK_FORMAT_R32_SFLOAT, VK_IMAGE_USAGE_SAMPLED_BIT | VK_IMAGE_USAGE_STORAGE_BIT);
+	surface.horizontal_map = resource_manager->CreateImage(VkExtent3D(RES, RES, 1), VK_FORMAT_R32G32B32A32_SFLOAT, VK_IMAGE_USAGE_SAMPLED_BIT | VK_IMAGE_USAGE_STORAGE_BIT);
 	surface.wave_texture = resource_manager->CreateImage(VkExtent3D(RES, RES, 1), VK_FORMAT_R32G32B32A32_SFLOAT, VK_IMAGE_USAGE_SAMPLED_BIT | VK_IMAGE_USAGE_STORAGE_BIT);
 	surface.conjugated_spectrum_texture = resource_manager->CreateImage(VkExtent3D(RES, RES, 1), VK_FORMAT_R32G32B32A32_SFLOAT, VK_IMAGE_USAGE_SAMPLED_BIT | VK_IMAGE_USAGE_STORAGE_BIT);
 	surface.height_map = resource_manager->CreateImage(VkExtent3D(RES, RES, 1), VK_FORMAT_R32G32B32A32_SFLOAT, VK_IMAGE_USAGE_SAMPLED_BIT | VK_IMAGE_USAGE_STORAGE_BIT);
-	surface.butterfly_texture = resource_manager->CreateImage(VkExtent3D(RES, RES, 1), VK_FORMAT_R32G32B32A32_SFLOAT, VK_IMAGE_USAGE_SAMPLED_BIT | VK_IMAGE_USAGE_STORAGE_BIT);
+	surface.butterfly_texture = resource_manager->CreateImage(VkExtent3D(log_size, RES, 1), VK_FORMAT_R32G32B32A32_SFLOAT, VK_IMAGE_USAGE_SAMPLED_BIT | VK_IMAGE_USAGE_STORAGE_BIT);
 	surface.gaussian_noise_texture = resource_manager->CreateImage(gaussian_noise.data(), VkExtent3D(RES, RES, 1), VK_FORMAT_R32G32_SFLOAT, VK_IMAGE_USAGE_SAMPLED_BIT | VK_IMAGE_USAGE_STORAGE_BIT, 8);
-	surface.spectrum_texture = resource_manager->CreateImage(VkExtent3D(RES, RES, 1), VK_FORMAT_R32G32B32A32_SFLOAT, VK_IMAGE_USAGE_SAMPLED_BIT | VK_IMAGE_USAGE_STORAGE_BIT);
+	surface.height_derivative = resource_manager->CreateImage(VkExtent3D(RES, RES, 1), VK_FORMAT_R32G32B32A32_SFLOAT, VK_IMAGE_USAGE_SAMPLED_BIT | VK_IMAGE_USAGE_STORAGE_BIT);
 	surface.ping_1 = resource_manager->CreateImage(VkExtent3D(RES, RES, 1), VK_FORMAT_R32G32B32A32_SFLOAT, VK_IMAGE_USAGE_SAMPLED_BIT | VK_IMAGE_USAGE_STORAGE_BIT);
 	surface.normal_map = resource_manager->CreateImage(VkExtent3D(RES, RES, 1), VK_FORMAT_R32G32B32A32_SFLOAT, VK_IMAGE_USAGE_SAMPLED_BIT | VK_IMAGE_USAGE_STORAGE_BIT);
 	surface.frequency_domain_texture = resource_manager->CreateImage(VkExtent3D(RES, RES, 1), VK_FORMAT_R32G32B32A32_SFLOAT, VK_IMAGE_USAGE_SAMPLED_BIT | VK_IMAGE_USAGE_STORAGE_BIT);
@@ -780,9 +850,8 @@ void FFTRenderer::InitDefaultData()
 	_mainDeletionQueue.push_function([=]() {
 		resource_manager->DestroyImage(surface.inital_spectrum_texture);
 		resource_manager->DestroyImage(surface.butterfly_texture);
-		resource_manager->DestroyImage(surface.ping_phase_texture);
-		resource_manager->DestroyImage(surface.pong_phase_texture);
-		resource_manager->DestroyImage(surface.spectrum_texture);
+		resource_manager->DestroyImage(surface.horizontal_map);
+		resource_manager->DestroyImage(surface.height_derivative);
 		resource_manager->DestroyImage(surface.ping_1);
 		resource_manager->DestroyImage(surface.normal_map);
 		resource_manager->DestroyImage(storage_image);
@@ -1003,45 +1072,6 @@ void FFTRenderer::GenerateInitialSpectrum(VkCommandBuffer cmd)
 
 }
 
-void FFTRenderer::PingPongPhasePass(VkCommandBuffer cmd)
-{
-	float currentFrame = glfwGetTime();
-	float deltaTime = currentFrame - delta.lastFrame;
-
-	ocean_params.ocean_size = surface.grid_dimensions;
-	ocean_params.resolution = surface.texture_dimensions;
-	ocean_params.delta_time = deltaTime;
-
-	VkDescriptorSet ping_pong_set = get_current_frame()._frameDescriptors.allocate(engine->_device, image_blit_layout);
-	DescriptorWriter writer;
-	if (sim_params.is_ping_phase)
-	{
-		writer.write_image(0, surface.ping_phase_texture.imageView, defaultSamplerLinear, VK_IMAGE_LAYOUT_GENERAL, VK_DESCRIPTOR_TYPE_STORAGE_IMAGE);
-		writer.write_image(1, surface.pong_phase_texture.imageView, defaultSamplerLinear, VK_IMAGE_LAYOUT_GENERAL, VK_DESCRIPTOR_TYPE_STORAGE_IMAGE);
-		auto barrier = vkinit::image_barrier(surface.pong_phase_texture.image, VK_ACCESS_SHADER_WRITE_BIT, VK_ACCESS_SHADER_READ_BIT, VK_IMAGE_LAYOUT_GENERAL, VK_IMAGE_LAYOUT_GENERAL, VK_IMAGE_ASPECT_COLOR_BIT);
-		image_barriers.push_back(barrier);
-
-	}
-	else
-	{
-		writer.write_image(0, surface.pong_phase_texture.imageView, defaultSamplerLinear, VK_IMAGE_LAYOUT_GENERAL, VK_DESCRIPTOR_TYPE_STORAGE_IMAGE);
-		writer.write_image(1, surface.ping_phase_texture.imageView, defaultSamplerLinear, VK_IMAGE_LAYOUT_GENERAL, VK_DESCRIPTOR_TYPE_STORAGE_IMAGE);
-		auto barrier = vkinit::image_barrier(surface.ping_phase_texture.image, VK_ACCESS_SHADER_WRITE_BIT, VK_ACCESS_SHADER_READ_BIT, VK_IMAGE_LAYOUT_GENERAL, VK_IMAGE_LAYOUT_GENERAL, VK_IMAGE_ASPECT_COLOR_BIT);
-		image_barriers.push_back(barrier);
-
-	}
-	writer.update_set(engine->_device, ping_pong_set);
-
-
-	vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, phase_pso.pipeline);
-
-	vkCmdPushConstants(cmd, phase_pso.layout, VK_SHADER_STAGE_COMPUTE_BIT, 0, sizeof(FFTParams), &ocean_params);
-
-	vkCmdBindDescriptorSets(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, phase_pso.layout, 0, 1, &ping_pong_set, 0, nullptr);
-
-	vkCmdDispatch(cmd, (surface.texture_dimensions / 32), (surface.texture_dimensions / 32) , 1);
-}
-
 void FFTRenderer::GenerateSpectrum(VkCommandBuffer cmd)
 {
 	float currentFrame = glfwGetTime();
@@ -1076,18 +1106,22 @@ void FFTRenderer::GenerateSpectrum(VkCommandBuffer cmd)
 void FFTRenderer::DebugComputePass(VkCommandBuffer cmd)
 {
 	vkutil::transition_image(cmd, _drawImage.image, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL, VK_IMAGE_LAYOUT_GENERAL);
-	vkutil::transition_image(cmd, surface.ping_phase_texture.image, VK_IMAGE_LAYOUT_GENERAL, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);
-	vkutil::transition_image(cmd, surface.spectrum_texture.image, VK_IMAGE_LAYOUT_GENERAL, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);
+	vkutil::transition_image(cmd, surface.horizontal_map.image, VK_IMAGE_LAYOUT_GENERAL, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);
+	vkutil::transition_image(cmd, surface.height_derivative.image, VK_IMAGE_LAYOUT_GENERAL, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);
 	vkutil::transition_image(cmd, surface.inital_spectrum_texture.image, VK_IMAGE_LAYOUT_GENERAL, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);
 	vkutil::transition_image(cmd, surface.conjugated_spectrum_texture.image, VK_IMAGE_LAYOUT_GENERAL, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);
 	vkutil::transition_image(cmd, surface.frequency_domain_texture.image, VK_IMAGE_LAYOUT_GENERAL, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);
 	vkutil::transition_image(cmd, surface.horizontal_displacement_map.image, VK_IMAGE_LAYOUT_GENERAL, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);
 	vkutil::transition_image(cmd, surface.height_derivative_texture.image, VK_IMAGE_LAYOUT_GENERAL, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);
+	vkutil::transition_image(cmd, surface.butterfly_texture.image, VK_IMAGE_LAYOUT_GENERAL, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);
+	vkutil::transition_image(cmd, surface.height_map.image, VK_IMAGE_LAYOUT_GENERAL, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);
+	vkutil::transition_image(cmd, surface.displacement_map.image, VK_IMAGE_LAYOUT_GENERAL, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);
+
 
 	VkDescriptorSet debug_set = get_current_frame()._frameDescriptors.allocate(engine->_device, debug_layout);
 	DescriptorWriter writer;
 	writer.write_image(0, _drawImage.imageView, samplerLinear, VK_IMAGE_LAYOUT_GENERAL, VK_DESCRIPTOR_TYPE_STORAGE_IMAGE);
-	writer.write_image(1, surface.butterfly_texture.imageView, samplerLinear, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER);
+	writer.write_image(1, surface.displacement_map.imageView, samplerLinear, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER);
 	writer.update_set(engine->_device, debug_set);
 
 	//auto screen_dims = glm::vec2(_drawImage.imageExtent.width, _drawImage.imageExtent.height);
@@ -1100,12 +1134,24 @@ void FFTRenderer::DebugComputePass(VkCommandBuffer cmd)
 	vkCmdDispatch(cmd, (_drawImage.imageExtent.width / 32) + 1, (_drawImage.imageExtent.height / 32) + 1, 1);
 	
 	vkutil::transition_image(cmd, _drawImage.image, VK_IMAGE_LAYOUT_GENERAL, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL);
+	vkutil::transition_image(cmd, surface.butterfly_texture.image, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL, VK_IMAGE_LAYOUT_GENERAL);
+	vkutil::transition_image(cmd, surface.frequency_domain_texture.image, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL, VK_IMAGE_LAYOUT_GENERAL);
+	vkutil::transition_image(cmd, surface.horizontal_displacement_map.image, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL, VK_IMAGE_LAYOUT_GENERAL);
+	vkutil::transition_image(cmd, surface.height_derivative_texture.image, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL, VK_IMAGE_LAYOUT_GENERAL);
+	vkutil::transition_image(cmd, surface.height_map.image, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL, VK_IMAGE_LAYOUT_GENERAL);
+	vkutil::transition_image(cmd, surface.horizontal_map.image, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL, VK_IMAGE_LAYOUT_GENERAL);
+	vkutil::transition_image(cmd, surface.conjugated_spectrum_texture.image, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,VK_IMAGE_LAYOUT_GENERAL);
+	vkutil::transition_image(cmd, surface.height_derivative.image, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL, VK_IMAGE_LAYOUT_GENERAL);
+	vkutil::transition_image(cmd, surface.displacement_map.image, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,VK_IMAGE_LAYOUT_GENERAL);
+
+
 }
 
 void FFTRenderer::DoIFFT(VkCommandBuffer cmd, AllocatedImage* input, AllocatedImage* output)
 {
-	AllocatedImage* ping_0 = nullptr;
+	AllocatedImage* ping_0 = input;
 	int ping_pong = 0;
+	ocean_params.log_size = log2(ocean_params.resolution);
 	if (output != nullptr)
 	{
 		//Copy input to output if output is specified
@@ -1128,6 +1174,7 @@ void FFTRenderer::DoIFFT(VkCommandBuffer cmd, AllocatedImage* input, AllocatedIm
 		ping_0 = output;
 	}
 
+	
 	VkDescriptorSet fft_set = get_current_frame()._frameDescriptors.allocate(engine->_device, fft_layout);
 	DescriptorWriter writer;
 
@@ -1137,30 +1184,6 @@ void FFTRenderer::DoIFFT(VkCommandBuffer cmd, AllocatedImage* input, AllocatedIm
 
 
 	writer.update_set(engine->_device, fft_set);
-
-
-	for (int stage = 0; stage < ocean_params.log_size; stage++)
-	{
-		ocean_params.ping_pong_count = ping_pong;
-		ocean_params.stage = stage;
-
-		vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, fft_vertical_pso.pipeline);
-
-		vkCmdPushConstants(cmd, fft_vertical_pso.layout, VK_SHADER_STAGE_COMPUTE_BIT, 0, sizeof(FFTParams), &ocean_params);
-
-		vkCmdBindDescriptorSets(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, fft_vertical_pso.layout, 0, 1, &fft_set, 0, nullptr);
-
-		vkCmdDispatch(cmd, (surface.texture_dimensions / 32), (surface.texture_dimensions / 32), 1);
-		
-		VkImageMemoryBarrier barrier;
-		if(ping_pong == 0)
-			barrier = vkinit::image_barrier(surface.ping_1.image, VK_ACCESS_SHADER_WRITE_BIT, VK_ACCESS_SHADER_READ_BIT, VK_IMAGE_LAYOUT_GENERAL, VK_IMAGE_LAYOUT_GENERAL, VK_IMAGE_ASPECT_COLOR_BIT);
-		else
-			barrier = vkinit::image_barrier(ping_0->image, VK_ACCESS_SHADER_WRITE_BIT, VK_ACCESS_SHADER_READ_BIT, VK_IMAGE_LAYOUT_GENERAL, VK_IMAGE_LAYOUT_GENERAL, VK_IMAGE_ASPECT_COLOR_BIT);
-		
-		vkCmdPipelineBarrier(cmd, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, VK_DEPENDENCY_BY_REGION_BIT, 0, 0, 0, 0, 1, &barrier);
-		ping_pong = (ping_pong + 1) % 2;
-	}
 
 	for (int stage = 0; stage < ocean_params.log_size; stage++)
 	{
@@ -1186,14 +1209,39 @@ void FFTRenderer::DoIFFT(VkCommandBuffer cmd, AllocatedImage* input, AllocatedIm
 		ping_pong = (ping_pong + 1) % 2;
 	}
 
+	for (int stage = 0; stage < ocean_params.log_size; stage++)
+	{
+		ocean_params.ping_pong_count = ping_pong;
+		ocean_params.stage = stage;
+
+		vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, fft_vertical_pso.pipeline);
+
+		vkCmdPushConstants(cmd, fft_vertical_pso.layout, VK_SHADER_STAGE_COMPUTE_BIT, 0, sizeof(FFTParams), &ocean_params);
+
+		vkCmdBindDescriptorSets(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, fft_vertical_pso.layout, 0, 1, &fft_set, 0, nullptr);
+
+		vkCmdDispatch(cmd, (surface.texture_dimensions / 32), (surface.texture_dimensions / 32), 1);
+		
+		VkImageMemoryBarrier barrier;
+		if(ping_pong == 0)
+			barrier = vkinit::image_barrier(surface.ping_1.image, VK_ACCESS_SHADER_WRITE_BIT, VK_ACCESS_SHADER_READ_BIT, VK_IMAGE_LAYOUT_GENERAL, VK_IMAGE_LAYOUT_GENERAL, VK_IMAGE_ASPECT_COLOR_BIT);
+		else
+			barrier = vkinit::image_barrier(ping_0->image, VK_ACCESS_SHADER_WRITE_BIT, VK_ACCESS_SHADER_READ_BIT, VK_IMAGE_LAYOUT_GENERAL, VK_IMAGE_LAYOUT_GENERAL, VK_IMAGE_ASPECT_COLOR_BIT);
+		
+		vkCmdPipelineBarrier(cmd, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, VK_DEPENDENCY_BY_REGION_BIT, 0, 0, 0, 0, 1, &barrier);
+		ping_pong = (ping_pong + 1) % 2;
+	}
+	
+	
+	
 	//Copy output
 	VkDescriptorSet copy_set = get_current_frame()._frameDescriptors.allocate(engine->_device, image_blit_layout);
-	DescriptorWriter writer;
+	DescriptorWriter writer_copy;
 
-	writer.write_image(0, input->imageView, samplerLinear, VK_IMAGE_LAYOUT_GENERAL, VK_DESCRIPTOR_TYPE_STORAGE_IMAGE);
-	writer.write_image(1, output->imageView, samplerLinear, VK_IMAGE_LAYOUT_GENERAL, VK_DESCRIPTOR_TYPE_STORAGE_IMAGE);
+	writer_copy.write_image(0, ping_0->imageView, samplerLinear, VK_IMAGE_LAYOUT_GENERAL, VK_DESCRIPTOR_TYPE_STORAGE_IMAGE);
+	writer_copy.write_image(1, surface.ping_1.imageView, samplerLinear, VK_IMAGE_LAYOUT_GENERAL, VK_DESCRIPTOR_TYPE_STORAGE_IMAGE);
 
-	writer.update_set(engine->_device, copy_set);
+	writer_copy.update_set(engine->_device, copy_set);
 
 	vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, copy_pso.pipeline);
 
@@ -1201,122 +1249,55 @@ void FFTRenderer::DoIFFT(VkCommandBuffer cmd, AllocatedImage* input, AllocatedIm
 
 	vkCmdDispatch(cmd, (surface.texture_dimensions / 32), (surface.texture_dimensions / 32), 1);
 
-	auto barrier = vkinit::image_barrier(output->image, VK_ACCESS_SHADER_WRITE_BIT, VK_ACCESS_SHADER_READ_BIT, VK_IMAGE_LAYOUT_GENERAL, VK_IMAGE_LAYOUT_GENERAL, VK_IMAGE_ASPECT_COLOR_BIT);
-	vkCmdPipelineBarrier(cmd, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, VK_DEPENDENCY_BY_REGION_BIT, 0, 0, 0, 0, 1, &barrier);
-
-}
-void FFTRenderer::FFTGenerationPass(VkCommandBuffer cmd)
-{
-	bool use_temp_texture = false;
+	auto copy_barrier = vkinit::image_barrier(surface.ping_1.image, VK_ACCESS_SHADER_WRITE_BIT, VK_ACCESS_SHADER_READ_BIT, VK_IMAGE_LAYOUT_GENERAL, VK_IMAGE_LAYOUT_GENERAL, VK_IMAGE_ASPECT_COLOR_BIT);
+	vkCmdPipelineBarrier(cmd, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, VK_DEPENDENCY_BY_REGION_BIT, 0, 0, 0, 0, 1, &copy_barrier);
 	
+	VkDescriptorSet permute_set = get_current_frame()._frameDescriptors.allocate(engine->_device, image_blit_layout);
+	DescriptorWriter writer_permute;
+
+	writer_permute.write_image(0, ping_0->imageView, samplerLinear, VK_IMAGE_LAYOUT_GENERAL, VK_DESCRIPTOR_TYPE_STORAGE_IMAGE);
+	writer_permute.write_image(1, surface.ping_1.imageView, samplerLinear, VK_IMAGE_LAYOUT_GENERAL, VK_DESCRIPTOR_TYPE_STORAGE_IMAGE);
+
+	writer_permute.update_set(engine->_device, permute_set);
+
+	vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, permute_scale_pso.pipeline);
+
+	vkCmdBindDescriptorSets(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, permute_scale_pso.layout, 0, 1, &permute_set, 0, nullptr);
+
+	vkCmdDispatch(cmd, (surface.texture_dimensions / 32), (surface.texture_dimensions / 32), 1);
+
+	auto barrier_permute = vkinit::image_barrier(ping_0->image, VK_ACCESS_SHADER_WRITE_BIT, VK_ACCESS_SHADER_READ_BIT, VK_IMAGE_LAYOUT_GENERAL, VK_IMAGE_LAYOUT_GENERAL, VK_IMAGE_ASPECT_COLOR_BIT);
+	vkCmdPipelineBarrier(cmd, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, VK_DEPENDENCY_BY_REGION_BIT, 0, 0, 0, 0, 1, &barrier_permute);
+	
+}
+
+void FFTRenderer::WrapSpectrum(VkCommandBuffer cmd)
+{
+	float currentFrame = glfwGetTime();
+	float deltaTime = currentFrame - delta.lastFrame;
+	delta.lastFrame = currentFrame;
+	ocean_params.ocean_size = surface.grid_dimensions;
+	ocean_params.resolution = surface.texture_dimensions;
+	ocean_params.delta_time = currentFrame;
+	//ocean_params.displacement_factor
+
+	VkDescriptorSet wrap_spectrum_set = get_current_frame()._frameDescriptors.allocate(engine->_device, wrap_spectrum_layout);
 	DescriptorWriter writer;
-	auto RES = ocean_params.resolution;
-	//Vertical FFT pass
-	ocean_params.total_count = RES;
-	VkImageMemoryBarrier memory_barrier;
-	/*
-	for(int i = 1; i < RES; i <<= 1)
-	{ 
-	VkDescriptorSet fft_set = get_current_frame()._frameDescriptors.allocate(engine->_device, image_blit_layout);
-	if (use_temp_texture)
-	{
-		writer.write_image(0, surface.temp_texture.imageView, defaultSamplerLinear, VK_IMAGE_LAYOUT_GENERAL, VK_DESCRIPTOR_TYPE_STORAGE_IMAGE);
-		writer.write_image(1, surface.spectrum_texture.imageView, defaultSamplerLinear, VK_IMAGE_LAYOUT_GENERAL, VK_DESCRIPTOR_TYPE_STORAGE_IMAGE);
-		memory_barrier = vkinit::image_barrier(surface.spectrum_texture.image, VK_ACCESS_SHADER_WRITE_BIT, VK_ACCESS_SHADER_READ_BIT, VK_IMAGE_LAYOUT_GENERAL, VK_IMAGE_LAYOUT_GENERAL, VK_IMAGE_ASPECT_COLOR_BIT);
 
-	}
-	else
-	{
-		writer.write_image(1, surface.temp_texture.imageView, defaultSamplerLinear, VK_IMAGE_LAYOUT_GENERAL, VK_DESCRIPTOR_TYPE_STORAGE_IMAGE);
-		writer.write_image(0, surface.spectrum_texture.imageView, defaultSamplerLinear, VK_IMAGE_LAYOUT_GENERAL, VK_DESCRIPTOR_TYPE_STORAGE_IMAGE);
-		memory_barrier = vkinit::image_barrier(surface.temp_texture.image, VK_ACCESS_SHADER_WRITE_BIT, VK_ACCESS_SHADER_READ_BIT, VK_IMAGE_LAYOUT_GENERAL, VK_IMAGE_LAYOUT_GENERAL, VK_IMAGE_ASPECT_COLOR_BIT);
+	writer.write_image(0, surface.height_derivative.imageView, samplerLinear, VK_IMAGE_LAYOUT_GENERAL, VK_DESCRIPTOR_TYPE_STORAGE_IMAGE);
+	writer.write_image(1, surface.height_map.imageView, samplerLinear, VK_IMAGE_LAYOUT_GENERAL, VK_DESCRIPTOR_TYPE_STORAGE_IMAGE);
+	writer.write_image(2, surface.horizontal_map.imageView, samplerLinear, VK_IMAGE_LAYOUT_GENERAL, VK_DESCRIPTOR_TYPE_STORAGE_IMAGE);
+	writer.write_image(3, surface.displacement_map.imageView, samplerLinear, VK_IMAGE_LAYOUT_GENERAL, VK_DESCRIPTOR_TYPE_STORAGE_IMAGE);
 
-	}
-		writer.update_set(engine->_device, fft_set);
-		ocean_params.subseq_count = i;
-		use_temp_texture = !use_temp_texture;
+	writer.update_set(engine->_device, wrap_spectrum_set);
 
-		vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, fft_vertical_pso.pipeline);
+	vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, wrap_spectrum_pso.pipeline);
 
-		vkCmdPushConstants(cmd, fft_vertical_pso.layout, VK_SHADER_STAGE_COMPUTE_BIT, 0, sizeof(FFTParams), &ocean_params);
+	vkCmdPushConstants(cmd, wrap_spectrum_pso.layout, VK_SHADER_STAGE_COMPUTE_BIT, 0, sizeof(FFTParams), &ocean_params);
 
-		vkCmdBindDescriptorSets(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, fft_vertical_pso.layout, 0, 1, &fft_set, 0, nullptr);
+	vkCmdBindDescriptorSets(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, wrap_spectrum_pso.layout, 0, 1, &wrap_spectrum_set, 0, nullptr);
 
-		vkCmdDispatch(cmd, RES, 1, 1);
-
-		vkCmdPipelineBarrier(cmd, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, VK_DEPENDENCY_BY_REGION_BIT, 0, 0, 0, 0, 1, &memory_barrier);
-	}
-	*/
-	
-	for (int i = 1; i < RES; i <<= 1)
-	{
-		VkDescriptorSet fft_set = get_current_frame()._frameDescriptors.allocate(engine->_device, image_blit_layout);
-		if (use_temp_texture)
-		{
-			writer.write_image(0, surface.ping_1.imageView, defaultSamplerLinear, VK_IMAGE_LAYOUT_GENERAL, VK_DESCRIPTOR_TYPE_STORAGE_IMAGE);
-			writer.write_image(1, surface.spectrum_texture.imageView, defaultSamplerLinear, VK_IMAGE_LAYOUT_GENERAL, VK_DESCRIPTOR_TYPE_STORAGE_IMAGE);
-			memory_barrier = vkinit::image_barrier(surface.spectrum_texture.image, VK_ACCESS_SHADER_WRITE_BIT, VK_ACCESS_SHADER_READ_BIT, VK_IMAGE_LAYOUT_GENERAL, VK_IMAGE_LAYOUT_GENERAL, VK_IMAGE_ASPECT_COLOR_BIT);
-
-		}
-		else
-		{
-			writer.write_image(1, surface.ping_1.imageView, defaultSamplerLinear, VK_IMAGE_LAYOUT_GENERAL, VK_DESCRIPTOR_TYPE_STORAGE_IMAGE);
-			writer.write_image(0, surface.spectrum_texture.imageView, defaultSamplerLinear, VK_IMAGE_LAYOUT_GENERAL, VK_DESCRIPTOR_TYPE_STORAGE_IMAGE);
-			memory_barrier = vkinit::image_barrier(surface.ping_1.image, VK_ACCESS_SHADER_WRITE_BIT, VK_ACCESS_SHADER_READ_BIT, VK_IMAGE_LAYOUT_GENERAL, VK_IMAGE_LAYOUT_GENERAL, VK_IMAGE_ASPECT_COLOR_BIT);
-
-		}
-		writer.update_set(engine->_device, fft_set);
-		//ocean_params.subseq_count = i;
-
-
-		vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, fft_vertical_pso.pipeline);
-
-		vkCmdPushConstants(cmd, fft_vertical_pso.layout, VK_SHADER_STAGE_COMPUTE_BIT, 0, sizeof(FFTParams), &ocean_params);
-
-		vkCmdBindDescriptorSets(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, fft_vertical_pso.layout, 0, 1, &fft_set, 0, nullptr);
-
-		vkCmdDispatch(cmd, (surface.texture_dimensions / 32) + 1, (surface.texture_dimensions / 32) + 1, 1);
-
-		vkCmdPipelineBarrier(cmd, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, VK_DEPENDENCY_BY_REGION_BIT, 0, 0, 0, 0, 1, &memory_barrier);
-		use_temp_texture = !use_temp_texture;
-	}
-
-	for (int i = 1; i < RES; i <<= 1)
-	{
-		VkDescriptorSet fft_set = get_current_frame()._frameDescriptors.allocate(engine->_device, image_blit_layout);
-		if (use_temp_texture)
-		{
-			writer.write_image(0, surface.ping_1.imageView, defaultSamplerLinear, VK_IMAGE_LAYOUT_GENERAL, VK_DESCRIPTOR_TYPE_STORAGE_IMAGE);
-			writer.write_image(1, surface.spectrum_texture.imageView, defaultSamplerLinear, VK_IMAGE_LAYOUT_GENERAL, VK_DESCRIPTOR_TYPE_STORAGE_IMAGE);
-			memory_barrier = vkinit::image_barrier(surface.spectrum_texture.image, VK_ACCESS_SHADER_WRITE_BIT, VK_ACCESS_SHADER_READ_BIT, VK_IMAGE_LAYOUT_GENERAL, VK_IMAGE_LAYOUT_GENERAL, VK_IMAGE_ASPECT_COLOR_BIT);
-
-		}
-		else
-		{
-			writer.write_image(1, surface.ping_1.imageView, defaultSamplerLinear, VK_IMAGE_LAYOUT_GENERAL, VK_DESCRIPTOR_TYPE_STORAGE_IMAGE);
-			writer.write_image(0, surface.spectrum_texture.imageView, defaultSamplerLinear, VK_IMAGE_LAYOUT_GENERAL, VK_DESCRIPTOR_TYPE_STORAGE_IMAGE);
-			memory_barrier = vkinit::image_barrier(surface.ping_1.image, VK_ACCESS_SHADER_WRITE_BIT, VK_ACCESS_SHADER_READ_BIT, VK_IMAGE_LAYOUT_GENERAL, VK_IMAGE_LAYOUT_GENERAL, VK_IMAGE_ASPECT_COLOR_BIT);
-
-		}
-		writer.update_set(engine->_device, fft_set);
-		//ocean_params.subseq_count = i;
-		
-
-		vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, fft_horizontal_pso.pipeline);
-
-		vkCmdPushConstants(cmd, fft_horizontal_pso.layout, VK_SHADER_STAGE_COMPUTE_BIT, 0, sizeof(FFTParams), &ocean_params);
-
-		vkCmdBindDescriptorSets(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, fft_horizontal_pso.layout, 0, 1, &fft_set, 0, nullptr);
-
-		vkCmdDispatch(cmd, (surface.texture_dimensions / 32) + 1, (surface.texture_dimensions / 32) + 1, 1);
-		vkCmdPipelineBarrier(cmd, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, VK_DEPENDENCY_BY_REGION_BIT, 0, 0, 0, 0, 1, &memory_barrier);
-		use_temp_texture = !use_temp_texture;
-	}
-	
-}
-
-void FFTRenderer::GenerateNormalMap(VkCommandBuffer cmd)
-{
+	vkCmdDispatch(cmd, (surface.texture_dimensions / 32), (surface.texture_dimensions / 32), 1);
 
 }
 void FFTRenderer::DrawMain(VkCommandBuffer cmd)
@@ -1334,10 +1315,14 @@ void FFTRenderer::DrawMain(VkCommandBuffer cmd)
 	if (debug_texture)
 		DebugComputePass(cmd);
 
-	//DoIFFT(cmd, &surface.frequency_domain_texture, &surface.height_map);
+	//Perform FFT on frequency textures
+	DoIFFT(cmd, &surface.frequency_domain_texture, &surface.height_map);
+	DoIFFT(cmd, &surface.height_derivative_texture, &surface.height_derivative);
+	DoIFFT(cmd, &surface.horizontal_displacement_map, &surface.horizontal_map);
+	//DoIFFT(cmd, &surface.jacobian_XxZz_map);
 	//FFTGenerationPass(cmd);
 	//GenerateNormalMap(cmd);
-
+	WrapSpectrum(cmd);
 	image_barriers.clear();
 }
 
@@ -1386,9 +1371,8 @@ void FFTRenderer::Draw()
 	vkutil::transition_image(cmd, _drawImage.image, VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL);
 	vkutil::transition_image(cmd, _depthImage.image, VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_DEPTH_ATTACHMENT_OPTIMAL);
 	vkutil::transition_image(cmd, surface.inital_spectrum_texture.image, VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_GENERAL);
-	vkutil::transition_image(cmd, surface.ping_phase_texture.image, VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_GENERAL);
-	vkutil::transition_image(cmd, surface.pong_phase_texture.image, VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_GENERAL);
-	vkutil::transition_image(cmd, surface.spectrum_texture.image, VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_GENERAL);
+	vkutil::transition_image(cmd, surface.horizontal_map.image, VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_GENERAL);
+	vkutil::transition_image(cmd, surface.height_derivative.image, VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_GENERAL);
 	vkutil::transition_image(cmd, surface.ping_1.image, VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_GENERAL);
 	vkutil::transition_image(cmd, surface.gaussian_noise_texture.image, VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_GENERAL);
 	vkutil::transition_image(cmd, surface.wave_texture.image, VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_GENERAL);
@@ -1398,7 +1382,8 @@ void FFTRenderer::Draw()
 	vkutil::transition_image(cmd, surface.height_derivative_texture.image, VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_GENERAL);
 	vkutil::transition_image(cmd, surface.frequency_domain_texture.image, VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_GENERAL);
 	vkutil::transition_image(cmd, surface.horizontal_displacement_map.image, VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_GENERAL);
-
+	vkutil::transition_image(cmd, surface.height_map.image, VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_GENERAL);
+	vkutil::transition_image(cmd, surface.displacement_map.image, VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_GENERAL);
 
 	DrawBackground(cmd);
 	//vkutil::transition_image(cmd, _drawImage.image, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL, VK_IMAGE_LAYOUT_GENERAL);
@@ -1682,7 +1667,7 @@ void FFTRenderer::DrawUI()
 		bool wind_mag_changed = ImGui::SliderFloat("Wind Magnitude", &sim_params.wind_magnitude, 10.f, 50.f);
 		bool wind_dir_changed = ImGui::SliderFloat("Wind Angle", &sim_params.wind_angle, 0, 359);
 
-		ImGui::SliderFloat("Choppiness", &ocean_params.choppiness, 0.f, 2.5f);
+		ImGui::SliderFloat("Choppiness", &ocean_params.displacement_factor, 0.f, 7.5f);
 		ImGui::SliderInt("Sun Elevation", &sim_params.sun_elevation, 0, 89);
 		ImGui::SliderInt("Sun Azimuth", &sim_params.sun_azimuth, 0, 359);
 		ImGui::Checkbox("Wireframe", &sim_params.wireframe);
