@@ -7,7 +7,6 @@
 #include "vk_buffer.h"
 #include "vk_loader.h"
 #include "Lights.h"
-#include "graphics.h"
 #include "UI.h"
 
 #include <VkBootstrap.h>
@@ -127,7 +126,7 @@ void VulkanEngine::init_imgui()
 	init_info.UseDynamicRendering = true;
 
 	//dynamic rendering parameters for imgui to use
-	init_info.PipelineRenderingCreateInfo = { .sType = VK_STRUCTURE_TYPE_PIPELINE_RENDERING_CREATE_INFO };
+	init_info.PipelineRenderingCreateInfo = VkPipelineRenderingCreateInfoKHR{VK_STRUCTURE_TYPE_PIPELINE_RENDERING_CREATE_INFO };
 	init_info.PipelineRenderingCreateInfo.colorAttachmentCount = 1;
 	init_info.PipelineRenderingCreateInfo.pColorAttachmentFormats = &_swapchainImageFormat;
 

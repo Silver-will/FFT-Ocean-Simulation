@@ -26,6 +26,12 @@ find_package(Vulkan REQUIRED)
 #set(KTX_FEATURE_TOOLS OFF CACHE BOOL "" FORCE)
 
 
+if (CMAKE_CXX_COMPILER_ID MATCHES "MSVC")
+    add_compile_options(/std:c++17)
+else()
+    add_compile_options(-std=c++17)
+endif()
+
 # Include sub-projects.
 add_subdirectory ("FFT-Sim")
 add_subdirectory ("third_party/glm")

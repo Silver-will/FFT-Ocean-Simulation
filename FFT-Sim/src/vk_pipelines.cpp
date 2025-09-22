@@ -1,6 +1,7 @@
 ﻿#include "vk_pipelines.h"
 #include <fstream>
 #include "vk_initializers.h"
+#include <iostream>
 
 bool vkutil::load_shader_module(const char* filePath, VkDevice device, VkShaderModule* outShaderModule)
 {
@@ -51,21 +52,21 @@ void PipelineBuilder::clear()
     // clear all of the structs we need back to 0 with their correct stype
 
      // completely clear VertexInputStateCreateInfo, as we have no need for it
-    _vertexInputInfo = { .sType = VK_STRUCTURE_TYPE_PIPELINE_VERTEX_INPUT_STATE_CREATE_INFO };
+    _vertexInputInfo  = VkPipelineVertexInputStateCreateInfo{VK_STRUCTURE_TYPE_PIPELINE_VERTEX_INPUT_STATE_CREATE_INFO };
 
-    _inputAssembly = { .sType = VK_STRUCTURE_TYPE_PIPELINE_INPUT_ASSEMBLY_STATE_CREATE_INFO };
+    _inputAssembly = VkPipelineInputAssemblyStateCreateInfo{VK_STRUCTURE_TYPE_PIPELINE_INPUT_ASSEMBLY_STATE_CREATE_INFO };
 
-    _rasterizer = { .sType = VK_STRUCTURE_TYPE_PIPELINE_RASTERIZATION_STATE_CREATE_INFO };
+    _rasterizer = VkPipelineRasterizationStateCreateInfo{VK_STRUCTURE_TYPE_PIPELINE_RASTERIZATION_STATE_CREATE_INFO };
 
     _colorBlendAttachment = {};
 
-    _multisampling = { .sType = VK_STRUCTURE_TYPE_PIPELINE_MULTISAMPLE_STATE_CREATE_INFO };
+    _multisampling = VkPipelineMultisampleStateCreateInfo{VK_STRUCTURE_TYPE_PIPELINE_MULTISAMPLE_STATE_CREATE_INFO };
 
     _pipelineLayout = {};
 
-    _depthStencil = { .sType = VK_STRUCTURE_TYPE_PIPELINE_DEPTH_STENCIL_STATE_CREATE_INFO };
+    _depthStencil = VkPipelineDepthStencilStateCreateInfo{VK_STRUCTURE_TYPE_PIPELINE_DEPTH_STENCIL_STATE_CREATE_INFO };
 
-    _renderInfo = { .sType = VK_STRUCTURE_TYPE_PIPELINE_RENDERING_CREATE_INFO };
+    _renderInfo = VkPipelineRenderingCreateInfo{VK_STRUCTURE_TYPE_PIPELINE_RENDERING_CREATE_INFO, nullptr};
 
     _shaderStages.clear();
 }
@@ -92,7 +93,7 @@ VkPipeline PipelineBuilder::build_pipeline(VkDevice device)
     colorBlending.attachmentCount = 1;
     colorBlending.pAttachments = &_colorBlendAttachment;
 
-    VkGraphicsPipelineCreateInfo pipelineInfo = { .sType = VK_STRUCTURE_TYPE_GRAPHICS_PIPELINE_CREATE_INFO };
+    VkGraphicsPipelineCreateInfo pipelineInfo{ VK_STRUCTURE_TYPE_GRAPHICS_PIPELINE_CREATE_INFO };
     // connect the renderInfo to the pNext extension mechanism
     pipelineInfo.pNext = &_renderInfo;
 
@@ -109,7 +110,7 @@ VkPipeline PipelineBuilder::build_pipeline(VkDevice device)
 
     VkDynamicState state[] = { VK_DYNAMIC_STATE_VIEWPORT, VK_DYNAMIC_STATE_SCISSOR };
 
-    VkPipelineDynamicStateCreateInfo dynamicInfo = { .sType = VK_STRUCTURE_TYPE_PIPELINE_DYNAMIC_STATE_CREATE_INFO };
+    VkPipelineDynamicStateCreateInfo dynamicInfo{VK_STRUCTURE_TYPE_PIPELINE_DYNAMIC_STATE_CREATE_INFO };
     dynamicInfo.pDynamicStates = &state[0];
     dynamicInfo.dynamicStateCount = 2;
 
@@ -119,7 +120,7 @@ VkPipeline PipelineBuilder::build_pipeline(VkDevice device)
     if (vkCreateGraphicsPipelines(device, VK_NULL_HANDLE, 1, &pipelineInfo,
         nullptr, &newPipeline)
         != VK_SUCCESS) {
-        std::println("failed to create pipeline");
+        std::cout << "failed to create pipeline" << std::endl;
         return VK_NULL_HANDLE; // failed to create graphics pipeline
     }
     else {

@@ -8,7 +8,7 @@
 
 void vkutil::transition_image(VkCommandBuffer cmd, VkImage image, VkImageLayout currentLayout, VkImageLayout newLayout)
 {
-    VkImageMemoryBarrier2 imageBarrier{ .sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER_2 };
+    VkImageMemoryBarrier2 imageBarrier{VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER_2 };
     imageBarrier.pNext = nullptr;
 
     imageBarrier.srcStageMask = VK_PIPELINE_STAGE_2_ALL_COMMANDS_BIT;
@@ -35,7 +35,7 @@ void vkutil::transition_image(VkCommandBuffer cmd, VkImage image, VkImageLayout 
 
 void vkutil::copy_image_to_image(VkCommandBuffer cmd, VkImage source, VkImage destination, VkExtent2D srcSize, VkExtent2D dstSize, VkImageBlit2* region)
 {
-	VkImageBlit2 blitRegion{ .sType = VK_STRUCTURE_TYPE_IMAGE_BLIT_2, .pNext = nullptr };
+	VkImageBlit2 blitRegion{ VK_STRUCTURE_TYPE_IMAGE_BLIT_2,nullptr };
 
 	blitRegion.srcOffsets[1].x = srcSize.width;
 	blitRegion.srcOffsets[1].y = srcSize.height;
@@ -58,7 +58,7 @@ void vkutil::copy_image_to_image(VkCommandBuffer cmd, VkImage source, VkImage de
     if (region != nullptr)
         blitRegion = *region;
 
-	VkBlitImageInfo2 blitInfo{ .sType = VK_STRUCTURE_TYPE_BLIT_IMAGE_INFO_2, .pNext = nullptr };
+	VkBlitImageInfo2 blitInfo{VK_STRUCTURE_TYPE_BLIT_IMAGE_INFO_2, nullptr };
 	blitInfo.dstImage = destination;
 	blitInfo.dstImageLayout = VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL;
 	blitInfo.srcImage = source;
@@ -80,7 +80,7 @@ void vkutil::generate_mipmaps(VkCommandBuffer cmd, VkImage image, VkExtent2D ima
         halfSize.width /= 2;
         halfSize.height /= 2;
 
-        VkImageMemoryBarrier2 imageBarrier{ .sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER_2, .pNext = nullptr };
+        VkImageMemoryBarrier2 imageBarrier{VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER_2, nullptr };
 
         imageBarrier.srcStageMask = VK_PIPELINE_STAGE_2_ALL_COMMANDS_BIT;
         imageBarrier.srcAccessMask = VK_ACCESS_2_MEMORY_WRITE_BIT;
@@ -96,14 +96,14 @@ void vkutil::generate_mipmaps(VkCommandBuffer cmd, VkImage image, VkExtent2D ima
         imageBarrier.subresourceRange.baseMipLevel = mip;
         imageBarrier.image = image;
 
-        VkDependencyInfo depInfo{ .sType = VK_STRUCTURE_TYPE_DEPENDENCY_INFO, .pNext = nullptr };
+        VkDependencyInfo depInfo{VK_STRUCTURE_TYPE_DEPENDENCY_INFO,nullptr };
         depInfo.imageMemoryBarrierCount = 1;
         depInfo.pImageMemoryBarriers = &imageBarrier;
 
         vkCmdPipelineBarrier2(cmd, &depInfo);
 
         if (mip < mipLevels - 1) {
-            VkImageBlit2 blitRegion{ .sType = VK_STRUCTURE_TYPE_IMAGE_BLIT_2, .pNext = nullptr };
+            VkImageBlit2 blitRegion{VK_STRUCTURE_TYPE_IMAGE_BLIT_2,nullptr };
 
             blitRegion.srcOffsets[1].x = imageSize.width;
             blitRegion.srcOffsets[1].y = imageSize.height;
@@ -123,7 +123,7 @@ void vkutil::generate_mipmaps(VkCommandBuffer cmd, VkImage image, VkExtent2D ima
             blitRegion.dstSubresource.layerCount = faces;
             blitRegion.dstSubresource.mipLevel = mip + 1;
 
-            VkBlitImageInfo2 blitInfo{ .sType = VK_STRUCTURE_TYPE_BLIT_IMAGE_INFO_2, .pNext = nullptr };
+            VkBlitImageInfo2 blitInfo{VK_STRUCTURE_TYPE_BLIT_IMAGE_INFO_2, nullptr };
             blitInfo.dstImage = image;
             blitInfo.dstImageLayout = VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL;
             blitInfo.srcImage = image;

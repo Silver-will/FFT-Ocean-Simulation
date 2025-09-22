@@ -4,6 +4,7 @@
 #include "vk_initializers.h"
 #include "vk_images.h"
 #include <print>
+#include <iostream>
 
 
 
@@ -11,12 +12,12 @@ void SkyBoxPipelineResources::build_pipelines(VulkanEngine* engine, PipelineCrea
 {
 	VkShaderModule skyVertexShader;
 	if (!vkutil::load_shader_module("../../assets/shaders/skybox.vert.spv", engine->_device, &skyVertexShader)) {
-		std::print("Error when building the shadow vertex shader module\n");
+		std::cout<<("Error when building the shadow vertex shader module\n");
 	}
 
 	VkShaderModule skyFragmentShader;
 	if (!vkutil::load_shader_module("../../assets/shaders/skybox.frag.spv", engine->_device, &skyFragmentShader)) {
-		std::print("Error when building the shadow fragment shader module\n");
+		std::cout <<("Error when building the shadow fragment shader module\n");
 	}
 
 	VkPushConstantRange matrixRange{};
@@ -73,12 +74,12 @@ void RenderImagePipelineObject::build_pipelines(VulkanEngine* engine, PipelineCr
 {
 	VkShaderModule HDRVertexShader;
 	if (!vkutil::load_shader_module("../../assets/shaders/hdr.vert.spv", engine->_device, &HDRVertexShader)) {
-		std::print("Error when building the shadow vertex shader module\n");
+		std::cout << ("Error when building the shadow vertex shader module\n");
 	}
 
 	VkShaderModule HDRFragmentShader;
 	if (!vkutil::load_shader_module("../../assets/shaders/hdr.frag.spv", engine->_device, &HDRFragmentShader)) {
-		std::print("Error when building the shadow fragment shader module\n");
+		std::cout << ("Error when building the shadow fragment shader module\n");
 	}
 
 	VkPushConstantRange matrixRange{};
@@ -129,12 +130,12 @@ void FFTPipelineObject::build_pipelines(VulkanEngine* engine, PipelineCreationIn
 	std::string assets_path = ENGINE_ASSET_PATH;
 	VkShaderModule oceanVertexShader;
 	if (!vkutil::load_shader_module(std::string(assets_path + "/shaders/ocean.vert.spv").c_str(), engine->_device, &oceanVertexShader)) {
-		std::print("Error when building the shadow vertex shader module\n");
+		std::cout << ("Error when building the shadow vertex shader module\n");
 	}
 
 	VkShaderModule oceanFragmentShader;
 	if (!vkutil::load_shader_module(std::string(assets_path + "/shaders/ocean.frag.spv").c_str(), engine->_device, &oceanFragmentShader)) {
-		std::print("Error when building the shadow fragment shader module\n");
+		std::cout << ("Error when building the shadow fragment shader module\n");
 	}
 
 

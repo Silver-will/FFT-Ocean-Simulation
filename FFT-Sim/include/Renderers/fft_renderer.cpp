@@ -1,14 +1,13 @@
 #include "fft_renderer.h"
 #include "../vk_device.h"
-#include "../graphics.h"
 #include "../UI.h"
 #include <stb_image.h>
 #include <VkBootstrap.h>
 
 #include <chrono>
 #include <thread>
-#include <print>
 #include <random>
+#include <iostream>
 
 #include <string>
 #include <glm/glm.hpp>
@@ -118,12 +117,14 @@ void FFTRenderer::InitEngine()
 {
 	//Request required GPU features and extensions
 	//vulkan 1.3 features
-	VkPhysicalDeviceVulkan13Features features{ .sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_1_3_FEATURES };
+	VkPhysicalDeviceVulkan13Features features{};
+	features.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_1_3_FEATURES;
 	features.dynamicRendering = true;
 	features.synchronization2 = true;
 
 	//vulkan 1.2 features
-	VkPhysicalDeviceVulkan12Features features12{ .sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_1_2_FEATURES };
+	VkPhysicalDeviceVulkan12Features features12{};
+	features12.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_1_2_FEATURES;
 	features12.bufferDeviceAddress = true;
 	features12.descriptorIndexing = true;
 	features12.runtimeDescriptorArray = true;
@@ -137,9 +138,10 @@ void FFTRenderer::InitEngine()
 	features12.samplerFilterMinmax = true;
 
 
-	VkPhysicalDeviceVulkan11Features features11{ .sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_1_1_FEATURES };
+	VkPhysicalDeviceVulkan11Features features11{};
+	features11.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_1_1_FEATURES;
 	features11.shaderDrawParameters = true;
-
+	
 	VkPhysicalDeviceFeatures baseFeatures{};
 	baseFeatures.geometryShader = true;
 	baseFeatures.samplerAnisotropy = true;
@@ -148,8 +150,6 @@ void FFTRenderer::InitEngine()
 	baseFeatures.multiDrawIndirect = true;
 	engine->init(baseFeatures, features11, features12, features);
 	resource_manager = std::make_shared<ResourceManager>(engine);
-	scene_manager = std::make_shared<SceneManager>();
-	scene_manager->Init(resource_manager, engine);
 }
 
 void FFTRenderer::InitSwapchain()
@@ -386,7 +386,7 @@ void FFTRenderer::DrawOceanMesh(VkCommandBuffer cmd)
 
 	AllocatedBuffer oceanDataBuffer = vkutil::create_buffer(sizeof(OceanUBO), VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT, VMA_MEMORY_USAGE_CPU_TO_GPU, engine);
 
-	get_current_frame()._deletionQueue.push_function([=, this]() {
+	get_current_frame()._deletionQueue.push_function([=] () {
 		vkutil::destroy_buffer(oceanDataBuffer, engine);
 		});
 
@@ -523,7 +523,9 @@ void FFTRenderer::BuildOceanMesh()
 	surface.mesh_data.indexBuffer = resource_manager->CreateBuffer(indexBufferSize, VK_BUFFER_USAGE_INDEX_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_SRC_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT,
 		VMA_MEMORY_USAGE_GPU_ONLY);
 
-	VkBufferDeviceAddressInfo deviceAdressInfo{ .sType = VK_STRUCTURE_TYPE_BUFFER_DEVICE_ADDRESS_INFO,.buffer = surface.mesh_data.vertexBuffer.buffer };
+	VkBufferDeviceAddressInfo deviceAdressInfo{};
+	deviceAdressInfo.sType = VK_STRUCTURE_TYPE_BUFFER_DEVICE_ADDRESS_INFO;
+	deviceAdressInfo.buffer = surface.mesh_data.vertexBuffer.buffer;
 	surface.mesh_data.vertexBufferAddress = vkGetBufferDeviceAddress(resource_manager->engine->_device, &deviceAdressInfo);
 
 
@@ -585,7 +587,7 @@ void FFTRenderer::InitComputePipelines()
 
 	VkShaderModule spectrum_shader;
 	if (!vkutil::load_shader_module(std::string(assets_path + "/shaders/time_dependent_spectrum.spv").c_str(), engine->_device, &spectrum_shader)) {
-		std::print("Error when building the compute shader \n");
+		std::cout<<"Error when building the compute shader \n";
 	}
 	
 	auto spectrum_stage_info = vkinit::pipeline_shader_stage_create_info(VK_SHADER_STAGE_COMPUTE_BIT, spectrum_shader);
@@ -605,7 +607,7 @@ void FFTRenderer::InitComputePipelines()
 
 	VkShaderModule wrap_spectrum_shader;
 	if (!vkutil::load_shader_module(std::string(assets_path + "/shaders/spectrum_wrapper.spv").c_str(), engine->_device, &wrap_spectrum_shader)) {
-		std::print("Error when building the compute shader \n");
+		std::cout<<("Error when building the compute shader \n");
 	}
 
 	auto wrap_spectrum_stage_info = vkinit::pipeline_shader_stage_create_info(VK_SHADER_STAGE_COMPUTE_BIT, wrap_spectrum_shader);
@@ -628,7 +630,7 @@ void FFTRenderer::InitComputePipelines()
 
 	VkShaderModule phase_shader;
 	if (!vkutil::load_shader_module(std::string(assets_path + "/shaders/phase.spv").c_str(), engine->_device, &phase_shader)) {
-		std::print("Error when building the compute shader \n");
+		std::cout<<("Error when building the compute shader \n");
 	}
 
 	auto phase_stage_info = vkinit::pipeline_shader_stage_create_info(VK_SHADER_STAGE_COMPUTE_BIT, phase_shader);
@@ -641,7 +643,7 @@ void FFTRenderer::InitComputePipelines()
 
 	VkShaderModule conjugate_spectrum_shader;
 	if (!vkutil::load_shader_module(std::string(assets_path + "/shaders/conjugate_spectrum.spv").c_str(), engine->_device, &conjugate_spectrum_shader)) {
-		std::print("Error when building the compute shader \n");
+		std::cout<<("Error when building the compute shader \n");
 	}
 
 	auto conjugate_spectrum_stage_info = vkinit::pipeline_shader_stage_create_info(VK_SHADER_STAGE_COMPUTE_BIT, conjugate_spectrum_shader);
@@ -654,7 +656,7 @@ void FFTRenderer::InitComputePipelines()
 
 	VkShaderModule copy_shader;
 	if (!vkutil::load_shader_module(std::string(assets_path + "/shaders/copy.spv").c_str(), engine->_device, &copy_shader)) {
-		std::print("Error when building the compute shader \n");
+		std::cout<<("Error when building the compute shader \n");
 	}
 
 	auto copy_stage_info = vkinit::pipeline_shader_stage_create_info(VK_SHADER_STAGE_COMPUTE_BIT, copy_shader);
@@ -668,7 +670,7 @@ void FFTRenderer::InitComputePipelines()
 
 	VkShaderModule permute_shader;
 	if (!vkutil::load_shader_module(std::string(assets_path + "/shaders/permute_and_scale.spv").c_str(), engine->_device, &permute_shader)) {
-		std::print("Error when building the compute shader \n");
+		std::cout<<("Error when building the compute shader \n");
 	}
 
 	auto permute_stage_info = vkinit::pipeline_shader_stage_create_info(VK_SHADER_STAGE_COMPUTE_BIT, permute_shader);
@@ -681,7 +683,7 @@ void FFTRenderer::InitComputePipelines()
 
 	VkShaderModule normal_shader;
 	if (!vkutil::load_shader_module(std::string(assets_path + "/shaders/normal_map.spv").c_str(), engine->_device, &normal_shader)) {
-		std::print("Error when building the compute shader \n");
+		std::cout<<("Error when building the compute shader \n");
 	}
 
 	auto normal_stage_info = vkinit::pipeline_shader_stage_create_info(VK_SHADER_STAGE_COMPUTE_BIT, normal_shader);
@@ -694,7 +696,7 @@ void FFTRenderer::InitComputePipelines()
 
 	VkShaderModule initial_spectrum_shader;
 	if (!vkutil::load_shader_module(std::string(assets_path + "/shaders/jonswap_spectrum.spv").c_str(), engine->_device, &initial_spectrum_shader)) {
-		std::print("Error when building the compute shader \n");
+		std::cout<<("Error when building the compute shader \n");
 	}
 
 	auto initial_spectrum_stage_info = vkinit::pipeline_shader_stage_create_info(VK_SHADER_STAGE_COMPUTE_BIT, initial_spectrum_shader);
@@ -716,7 +718,7 @@ void FFTRenderer::InitComputePipelines()
 
 	VkShaderModule debug_shader;
 	if (!vkutil::load_shader_module(std::string(assets_path + "/shaders/debug.spv").c_str(), engine->_device, &debug_shader)) {
-		std::print("Error when building the compute shader \n");
+		std::cout<<("Error when building the compute shader \n");
 	}
 
 	auto debug_stage_info = vkinit::pipeline_shader_stage_create_info(VK_SHADER_STAGE_COMPUTE_BIT, debug_shader);
@@ -738,7 +740,7 @@ void FFTRenderer::InitComputePipelines()
 
 	VkShaderModule fft_vertical_shader;
 	if (!vkutil::load_shader_module(std::string(assets_path + "/shaders/fft_vertical.spv").c_str(), engine->_device, &fft_vertical_shader)) {
-		std::print("Error when building the compute shader \n");
+		std::cout<<("Error when building the compute shader \n");
 	}
 
 	auto fft_vertical_stage_info = vkinit::pipeline_shader_stage_create_info(VK_SHADER_STAGE_COMPUTE_BIT, fft_vertical_shader);
@@ -752,7 +754,7 @@ void FFTRenderer::InitComputePipelines()
 
 	VkShaderModule fft_horizontal_shader;
 	if (!vkutil::load_shader_module(std::string(assets_path + "/shaders/fft_horizontal.spv").c_str(), engine->_device, &fft_horizontal_shader)) {
-		std::print("Error when building the compute shader \n");
+		std::cout<<("Error when building the compute shader \n");
 	}
 
 	auto fft_horizontal_stage_info = vkinit::pipeline_shader_stage_create_info(VK_SHADER_STAGE_COMPUTE_BIT, fft_horizontal_shader);
@@ -775,7 +777,7 @@ void FFTRenderer::InitComputePipelines()
 
 	VkShaderModule butterfly_shader;
 	if (!vkutil::load_shader_module(std::string(assets_path + "/shaders/butterfly.spv").c_str(), engine->_device, &butterfly_shader)) {
-		std::print("Error when building the compute shader \n");
+		std::cout<<"Error when building the compute shader \n";
 	}
 
 	auto butterfly_stage_info = vkinit::pipeline_shader_stage_create_info(VK_SHADER_STAGE_COMPUTE_BIT, butterfly_shader);
@@ -831,23 +833,32 @@ void FFTRenderer::InitDefaultData()
 	}
 
 	auto log_size = log2(RES);
+	VkExtent3D oceanExtent;
+	oceanExtent.width = RES;
+	oceanExtent.height = RES;
+	oceanExtent.depth = 1;
+
+	VkExtent3D logExtent;
+	logExtent = oceanExtent;
+	logExtent.width = log_size;
+
 	//stbi_load(std::string(assets_path + "textures/back.png"))
-	surface.displacement_map = resource_manager->CreateImage(VkExtent3D(RES, RES, 1), VK_FORMAT_R32G32B32A32_SFLOAT, VK_IMAGE_USAGE_SAMPLED_BIT | VK_IMAGE_USAGE_STORAGE_BIT);
-	surface.inital_spectrum_texture = resource_manager->CreateImage(VkExtent3D(RES, RES, 1), VK_FORMAT_R32G32_SFLOAT, VK_IMAGE_USAGE_SAMPLED_BIT | VK_IMAGE_USAGE_STORAGE_BIT);
-	surface.horizontal_map = resource_manager->CreateImage(VkExtent3D(RES, RES, 1), VK_FORMAT_R32G32B32A32_SFLOAT, VK_IMAGE_USAGE_SAMPLED_BIT | VK_IMAGE_USAGE_STORAGE_BIT);
-	surface.wave_texture = resource_manager->CreateImage(VkExtent3D(RES, RES, 1), VK_FORMAT_R32G32B32A32_SFLOAT, VK_IMAGE_USAGE_SAMPLED_BIT | VK_IMAGE_USAGE_STORAGE_BIT);
-	surface.conjugated_spectrum_texture = resource_manager->CreateImage(VkExtent3D(RES, RES, 1), VK_FORMAT_R32G32B32A32_SFLOAT, VK_IMAGE_USAGE_SAMPLED_BIT | VK_IMAGE_USAGE_STORAGE_BIT);
-	surface.height_map = resource_manager->CreateImage(VkExtent3D(RES, RES, 1), VK_FORMAT_R32G32B32A32_SFLOAT, VK_IMAGE_USAGE_SAMPLED_BIT | VK_IMAGE_USAGE_STORAGE_BIT);
-	surface.butterfly_texture = resource_manager->CreateImage(VkExtent3D(log_size, RES, 1), VK_FORMAT_R32G32B32A32_SFLOAT, VK_IMAGE_USAGE_SAMPLED_BIT | VK_IMAGE_USAGE_STORAGE_BIT);
-	surface.gaussian_noise_texture = resource_manager->CreateImage(gaussian_noise.data(), VkExtent3D(RES, RES, 1), VK_FORMAT_R32G32_SFLOAT, VK_IMAGE_USAGE_SAMPLED_BIT | VK_IMAGE_USAGE_STORAGE_BIT, 8);
-	surface.height_derivative = resource_manager->CreateImage(VkExtent3D(RES, RES, 1), VK_FORMAT_R32G32B32A32_SFLOAT, VK_IMAGE_USAGE_SAMPLED_BIT | VK_IMAGE_USAGE_STORAGE_BIT);
-	surface.ping_1 = resource_manager->CreateImage(VkExtent3D(RES, RES, 1), VK_FORMAT_R32G32B32A32_SFLOAT, VK_IMAGE_USAGE_SAMPLED_BIT | VK_IMAGE_USAGE_STORAGE_BIT);
-	surface.normal_map = resource_manager->CreateImage(VkExtent3D(RES, RES, 1), VK_FORMAT_R32G32B32A32_SFLOAT, VK_IMAGE_USAGE_SAMPLED_BIT | VK_IMAGE_USAGE_STORAGE_BIT);
-	surface.frequency_domain_texture = resource_manager->CreateImage(VkExtent3D(RES, RES, 1), VK_FORMAT_R32G32B32A32_SFLOAT, VK_IMAGE_USAGE_SAMPLED_BIT | VK_IMAGE_USAGE_STORAGE_BIT);
-	surface.horizontal_displacement_map = resource_manager->CreateImage(VkExtent3D(RES, RES, 1), VK_FORMAT_R32G32B32A32_SFLOAT, VK_IMAGE_USAGE_SAMPLED_BIT | VK_IMAGE_USAGE_STORAGE_BIT);
-	surface.height_derivative_texture = resource_manager->CreateImage(VkExtent3D(RES, RES, 1), VK_FORMAT_R32G32B32A32_SFLOAT, VK_IMAGE_USAGE_SAMPLED_BIT | VK_IMAGE_USAGE_STORAGE_BIT);
-	surface.jacobian_XxZz_map = resource_manager->CreateImage(VkExtent3D(RES, RES, 1), VK_FORMAT_R32G32B32A32_SFLOAT, VK_IMAGE_USAGE_SAMPLED_BIT | VK_IMAGE_USAGE_STORAGE_BIT);
-	surface.jacobian_xz_map = resource_manager->CreateImage(VkExtent3D(RES, RES, 1), VK_FORMAT_R32G32_SFLOAT, VK_IMAGE_USAGE_SAMPLED_BIT | VK_IMAGE_USAGE_STORAGE_BIT);
+	surface.displacement_map = resource_manager->CreateImage(oceanExtent, VK_FORMAT_R32G32B32A32_SFLOAT, VK_IMAGE_USAGE_SAMPLED_BIT | VK_IMAGE_USAGE_STORAGE_BIT);
+	surface.inital_spectrum_texture = resource_manager->CreateImage(oceanExtent, VK_FORMAT_R32G32_SFLOAT, VK_IMAGE_USAGE_SAMPLED_BIT | VK_IMAGE_USAGE_STORAGE_BIT);
+	surface.horizontal_map = resource_manager->CreateImage(oceanExtent, VK_FORMAT_R32G32B32A32_SFLOAT, VK_IMAGE_USAGE_SAMPLED_BIT | VK_IMAGE_USAGE_STORAGE_BIT);
+	surface.wave_texture = resource_manager->CreateImage(oceanExtent, VK_FORMAT_R32G32B32A32_SFLOAT, VK_IMAGE_USAGE_SAMPLED_BIT | VK_IMAGE_USAGE_STORAGE_BIT);
+	surface.conjugated_spectrum_texture = resource_manager->CreateImage(oceanExtent, VK_FORMAT_R32G32B32A32_SFLOAT, VK_IMAGE_USAGE_SAMPLED_BIT | VK_IMAGE_USAGE_STORAGE_BIT);
+	surface.height_map = resource_manager->CreateImage(oceanExtent, VK_FORMAT_R32G32B32A32_SFLOAT, VK_IMAGE_USAGE_SAMPLED_BIT | VK_IMAGE_USAGE_STORAGE_BIT);
+	surface.butterfly_texture = resource_manager->CreateImage(logExtent, VK_FORMAT_R32G32B32A32_SFLOAT, VK_IMAGE_USAGE_SAMPLED_BIT | VK_IMAGE_USAGE_STORAGE_BIT);
+	surface.gaussian_noise_texture = resource_manager->CreateImage(gaussian_noise.data(), oceanExtent, VK_FORMAT_R32G32_SFLOAT, VK_IMAGE_USAGE_SAMPLED_BIT | VK_IMAGE_USAGE_STORAGE_BIT, 8);
+	surface.height_derivative = resource_manager->CreateImage(oceanExtent, VK_FORMAT_R32G32B32A32_SFLOAT, VK_IMAGE_USAGE_SAMPLED_BIT | VK_IMAGE_USAGE_STORAGE_BIT);
+	surface.ping_1 = resource_manager->CreateImage(oceanExtent, VK_FORMAT_R32G32B32A32_SFLOAT, VK_IMAGE_USAGE_SAMPLED_BIT | VK_IMAGE_USAGE_STORAGE_BIT);
+	surface.normal_map = resource_manager->CreateImage(oceanExtent, VK_FORMAT_R32G32B32A32_SFLOAT, VK_IMAGE_USAGE_SAMPLED_BIT | VK_IMAGE_USAGE_STORAGE_BIT);
+	surface.frequency_domain_texture = resource_manager->CreateImage(oceanExtent, VK_FORMAT_R32G32B32A32_SFLOAT, VK_IMAGE_USAGE_SAMPLED_BIT | VK_IMAGE_USAGE_STORAGE_BIT);
+	surface.horizontal_displacement_map = resource_manager->CreateImage(oceanExtent, VK_FORMAT_R32G32B32A32_SFLOAT, VK_IMAGE_USAGE_SAMPLED_BIT | VK_IMAGE_USAGE_STORAGE_BIT);
+	surface.height_derivative_texture = resource_manager->CreateImage(oceanExtent, VK_FORMAT_R32G32B32A32_SFLOAT, VK_IMAGE_USAGE_SAMPLED_BIT | VK_IMAGE_USAGE_STORAGE_BIT);
+	surface.jacobian_XxZz_map = resource_manager->CreateImage(oceanExtent, VK_FORMAT_R32G32B32A32_SFLOAT, VK_IMAGE_USAGE_SAMPLED_BIT | VK_IMAGE_USAGE_STORAGE_BIT);
+	surface.jacobian_xz_map = resource_manager->CreateImage(oceanExtent, VK_FORMAT_R32G32_SFLOAT, VK_IMAGE_USAGE_SAMPLED_BIT | VK_IMAGE_USAGE_STORAGE_BIT);
 
 	ocean_params.log_size = log2(RES);
 	//Create default images
@@ -864,7 +875,8 @@ void FFTRenderer::InitDefaultData()
 	main_camera.setPosition(glm::vec3(0.0f, -25.f, 0.0f));
 	main_camera.setRotation(glm::vec3(-17.0f, 7.0f, 0.0f));
 
-	VkSamplerCreateInfo sampl = { .sType = VK_STRUCTURE_TYPE_SAMPLER_CREATE_INFO };
+	VkSamplerCreateInfo sampl{};
+	sampl.sType = VK_STRUCTURE_TYPE_SAMPLER_CREATE_INFO;
 
 	sampl.magFilter = VK_FILTER_NEAREST;
 	sampl.minFilter = VK_FILTER_NEAREST;
@@ -883,7 +895,8 @@ void FFTRenderer::InitDefaultData()
 
 
 
-	VkSamplerCreateInfo cubeSampl = { .sType = VK_STRUCTURE_TYPE_SAMPLER_CREATE_INFO };
+	VkSamplerCreateInfo cubeSampl{};
+	cubeSampl.sType = VK_STRUCTURE_TYPE_SAMPLER_CREATE_INFO;
 	cubeSampl.magFilter = VK_FILTER_LINEAR;
 	cubeSampl.minFilter = VK_FILTER_LINEAR;
 	cubeSampl.mipmapMode = VK_SAMPLER_MIPMAP_MODE_LINEAR;
@@ -923,9 +936,12 @@ void FFTRenderer::CreateSwapchain(uint32_t width, uint32_t height)
 
 	swapchain_image_format = VK_FORMAT_B8G8R8A8_UNORM;
 
+	VkSurfaceFormatKHR surface{};
+	surface.format = swapchain_image_format;
+	surface.colorSpace = VK_COLOR_SPACE_SRGB_NONLINEAR_KHR;
 	vkb::Swapchain vkbSwapchain = swapchainBuilder
 		//.use_default_format_selection()
-		.set_desired_format(VkSurfaceFormatKHR{ .format = swapchain_image_format, .colorSpace = VK_COLOR_SPACE_SRGB_NONLINEAR_KHR })
+		.set_desired_format(surface)
 		//use vsync present mode
 		.set_desired_present_mode(VK_PRESENT_MODE_IMMEDIATE_KHR)
 		.set_desired_extent(width, height)
@@ -998,8 +1014,11 @@ void FFTRenderer::InitImgui()
 	init_info.ImageCount = 3;
 	init_info.UseDynamicRendering = true;
 
+	VkPipelineRenderingCreateInfoKHR render_info{};
+	render_info.sType = VK_STRUCTURE_TYPE_PIPELINE_RENDERING_CREATE_INFO;
+	render_info.pNext = nullptr;
 	//dynamic rendering parameters for imgui to use
-	init_info.PipelineRenderingCreateInfo = { .sType = VK_STRUCTURE_TYPE_PIPELINE_RENDERING_CREATE_INFO };
+	init_info.PipelineRenderingCreateInfo = render_info;
 	init_info.PipelineRenderingCreateInfo.colorAttachmentCount = 1;
 	init_info.PipelineRenderingCreateInfo.pColorAttachmentFormats = &swapchain_image_format;
 

@@ -10,7 +10,6 @@
 #include "../vk_buffer.h"
 #include "../vk_loader.h"
 #include "../resource_manager.h"
-#include "../scene_manager.h"
 
 
 constexpr unsigned int FRAME_OVERLAP = 2;

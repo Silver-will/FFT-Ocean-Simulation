@@ -12,7 +12,6 @@
 #include "engine_psos.h"
 #include "Lights.h"
 #include <chrono>
-#include "scene_manager.h"
 #include "resource_manager.h"
 
 struct FrameData {

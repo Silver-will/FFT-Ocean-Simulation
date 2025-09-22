@@ -15,6 +15,7 @@
 #include <functional>
 #include <deque>
 #include <string_view>
+#include <iostream>
 
 #include <vulkan/vulkan.h>
 #include <vulkan/vk_enum_string_helper.h>
@@ -305,7 +306,7 @@ struct EngineStats {
     do {                                                                \
         VkResult err = x;                                               \
         if (err) {                                                      \
-            std::println("Detected Vulkan error: {}", string_VkResult(err)); \
+            std::cout<<"Detected Vulkan error: " << string_VkResult(err); \
             abort();                                                    \
         }                                                               \
     } while (0)

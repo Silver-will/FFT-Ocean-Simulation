@@ -135,7 +135,6 @@ private:
 	
 	Camera main_camera;
 	std::shared_ptr<ResourceManager> resource_manager;
-	std::shared_ptr<SceneManager> scene_manager;
 
 	VkSwapchainKHR swapchain;
 	VkFormat swapchain_image_format;

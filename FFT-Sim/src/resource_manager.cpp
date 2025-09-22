@@ -39,7 +39,8 @@ void ResourceManager::init(VulkanEngine* engine_ptr) {
     errorCheckerboardImage = CreateImage(pixels.data(), VkExtent3D{ 16, 16, 1 }, VK_FORMAT_R8G8B8A8_UNORM,
         VK_IMAGE_USAGE_SAMPLED_BIT);
 
-    VkSamplerCreateInfo sampl = { .sType = VK_STRUCTURE_TYPE_SAMPLER_CREATE_INFO };
+    VkSamplerCreateInfo sampl{};
+    sampl.sType = VK_STRUCTURE_TYPE_SAMPLER_CREATE_INFO;
 
     sampl.magFilter = VK_FILTER_NEAREST;
     sampl.minFilter = VK_FILTER_NEAREST;
@@ -120,8 +121,8 @@ ResourceManager::ResourceManager(VulkanEngine* engine)
     errorCheckerboardImage = CreateImage(pixels.data(), VkExtent3D{ 16, 16, 1 }, VK_FORMAT_R8G8B8A8_UNORM,
         VK_IMAGE_USAGE_SAMPLED_BIT);
 
-    VkSamplerCreateInfo sampl = { .sType = VK_STRUCTURE_TYPE_SAMPLER_CREATE_INFO };
-
+    VkSamplerCreateInfo sampl{};
+    sampl.sType = VK_STRUCTURE_TYPE_SAMPLER_CREATE_INFO;
     sampl.magFilter = VK_FILTER_NEAREST;
     sampl.minFilter = VK_FILTER_NEAREST;
 
@@ -191,7 +192,8 @@ AllocatedBuffer* ResourceManager::GetReadBackBuffer()
 AllocatedBuffer ResourceManager::CreateBuffer(size_t allocSize, VkBufferUsageFlags usage, VmaMemoryUsage memoryUsage)
 {
     // allocate buffer
-    VkBufferCreateInfo bufferInfo = { .sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO };
+    VkBufferCreateInfo bufferInfo{};
+    bufferInfo.sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO;
     bufferInfo.pNext = nullptr;
     bufferInfo.size = allocSize;
 
@@ -248,7 +250,7 @@ void ResourceManager::DestroyBuffer(const AllocatedBuffer& buffer)
 }
 
 
-GPUMeshBuffers ResourceManager::UploadMesh(std::span<uint32_t> indices, std::span<Vertex> vertices)
+GPUMeshBuffers ResourceManager::UploadMesh(std::vector<uint32_t> indices, std::vector<Vertex> vertices)
 {
     const size_t vertexBufferSize = vertices.size() * sizeof(Vertex);
     const size_t indexBufferSize = indices.size() * sizeof(uint32_t);
@@ -259,7 +261,9 @@ GPUMeshBuffers ResourceManager::UploadMesh(std::span<uint32_t> indices, std::spa
         VMA_MEMORY_USAGE_GPU_ONLY);
 
 
-    VkBufferDeviceAddressInfo deviceAdressInfo{ .sType = VK_STRUCTURE_TYPE_BUFFER_DEVICE_ADDRESS_INFO,.buffer = newSurface.vertexBuffer.buffer };
+   VkBufferDeviceAddressInfo deviceAdressInfo{};
+	deviceAdressInfo.sType = VK_STRUCTURE_TYPE_BUFFER_DEVICE_ADDRESS_INFO;
+	deviceAdressInfo.buffer = newSurface.vertexBuffer.buffer;
     newSurface.vertexBufferAddress = vkGetBufferDeviceAddress(engine->_device, &deviceAdressInfo);
 
     newSurface.indexBuffer = CreateBuffer(indexBufferSize, VK_BUFFER_USAGE_INDEX_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_SRC_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT,
