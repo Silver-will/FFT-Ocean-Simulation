@@ -328,6 +328,7 @@ void FFTRenderer::InitDescriptors()
 		builder.add_binding(0, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER);
 		builder.add_binding(1, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER);
 		builder.add_binding(2, VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER);
+		builder.add_binding(3, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER);
 		ocean_shading_layout = builder.build(engine->_device, VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_FRAGMENT_BIT);
 	}
 	{
@@ -404,6 +405,7 @@ void FFTRenderer::DrawOceanMesh(VkCommandBuffer cmd)
 	writer.write_image(0, surface.displacement_map.imageView, defaultSamplerLinear, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER);
 	writer.write_image(1, surface.height_derivative.imageView, defaultSamplerLinear, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER);
 	writer.write_buffer(2, oceanDataBuffer.buffer, sizeof(OceanUBO), 0, VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER);
+	writer.write_image(3, surface.sky_image.imageView,cubeMapSampler, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER);
 	writer.update_set(engine->_device, globalDescriptor);
 
 	vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, fft_pipeline.FFTOceanPipeline.pipeline);
@@ -910,7 +912,7 @@ void FFTRenderer::InitDefaultData()
 	//samplerCreateInfo.anisotropyEnable = device->enabledFeatures.samplerAnisotropy;
 	cubeSampl.compareOp = VK_COMPARE_OP_NEVER;
 	cubeSampl.minLod = 0.0f;
-	cubeSampl.maxLod = (float)11;
+	cubeSampl.maxLod = (float)10;
 	cubeSampl.borderColor = VK_BORDER_COLOR_FLOAT_OPAQUE_WHITE;
 	vkCreateSampler(engine->_device, &cubeSampl, nullptr, &cubeMapSampler);
 

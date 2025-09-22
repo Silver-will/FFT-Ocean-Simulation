@@ -2,7 +2,7 @@
 #include "vk_initializers.h"
 #include "vk_buffer.h"
 #include "vk_engine.h"
-
+#include <cstring>
 #include <stb_image.h>
 #include <iostream>
 

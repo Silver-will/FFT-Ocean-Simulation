@@ -50,7 +50,10 @@ void VulkanEngine::init(VkPhysicalDeviceFeatures baseFeatures, VkPhysicalDeviceV
 
 	window = glfwCreateWindow(_windowExtent.width, _windowExtent.height, "Black key", nullptr, nullptr);
 	if (window == nullptr)
-		throw std::exception("FATAL ERROR: Failed to create window");
+	{
+		std::cout << "Fatal error, Please exit" << std::endl;
+		abort();
+	}
 
 	init_vulkan(baseFeatures, features11, features12, features13);
 	init_commands();

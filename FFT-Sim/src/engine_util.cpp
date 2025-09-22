@@ -8,7 +8,6 @@ std::string GetAssetPath()
 #else
     return "../..";
 #endif
-    return "assets/";
 }
 
 glm::vec4 BlackKey::Vec3Tovec4(glm::vec3 v, float fill) {
