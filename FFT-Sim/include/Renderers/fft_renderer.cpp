@@ -381,44 +381,138 @@ void FFTRenderer::InitDescriptors()
 	}
 }
 
+void FFTRenderer::DrawOceanMesh(VkCommandBuffer cmd)
+{
+
+	AllocatedBuffer oceanDataBuffer = vkutil::create_buffer(sizeof(OceanUBO), VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT, VMA_MEMORY_USAGE_CPU_TO_GPU, engine);
+
+	get_current_frame()._deletionQueue.push_function([=, this]() {
+		vkutil::destroy_buffer(oceanDataBuffer, engine);
+		});
+
+
+	//write our allocated uniform buffers
+	void* oceanDataPtr = nullptr;
+	vmaMapMemory(engine->_allocator, oceanDataBuffer.allocation, &oceanDataPtr);
+	OceanUBO* ptr = (OceanUBO*)oceanDataPtr;
+	*ptr = ocean_scene_data;
+	vmaUnmapMemory(engine->_allocator, oceanDataBuffer.allocation);
+
+	VkDescriptorSet globalDescriptor = get_current_frame()._frameDescriptors.allocate(engine->_device, ocean_shading_layout);
+
+	DescriptorWriter writer;
+	writer.write_image(0, surface.displacement_map.imageView, defaultSamplerLinear, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER);
+	writer.write_image(1, surface.height_derivative.imageView, defaultSamplerLinear, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER);
+	writer.write_buffer(2, oceanDataBuffer.buffer, sizeof(OceanUBO), 0, VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER);
+	writer.update_set(engine->_device, globalDescriptor);
+
+	vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, fft_pipeline.FFTOceanPipeline.pipeline);
+	vkCmdBindDescriptorSets(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, fft_pipeline.FFTOceanPipeline.layout, 0, 1,
+		&globalDescriptor, 0, nullptr);
+
+	VkViewport viewport = {};
+	viewport.x = 0;
+	viewport.y = 0;
+	viewport.width = (float)_windowExtent.width;;
+	viewport.height = (float)_windowExtent.height;
+	viewport.minDepth = 0.f;
+	viewport.maxDepth = 1.f;
+	vkCmdSetViewport(cmd, 0, 1, &viewport);
+
+	VkRect2D scissor = {};
+	scissor.offset.x = 0;
+	scissor.offset.y = 0;
+	scissor.extent.width = _windowExtent.width;;
+	scissor.extent.height = _windowExtent.height;
+	vkCmdSetScissor(cmd, 0, 1, &scissor);
+
+	
+	GPUDrawPushConstants push_constants;
+	push_constants.vertexBuffer = surface.mesh_data.vertexBufferAddress;
+	push_constants.material_index = ocean_params.resolution;
+	push_constants.worldMatrix = scene_data.viewproj;
+
+	vkCmdPushConstants(cmd, fft_pipeline.FFTOceanPipeline.layout, VK_SHADER_STAGE_VERTEX_BIT, 0, sizeof(GPUDrawPushConstants), &push_constants);
+	vkCmdBindIndexBuffer(cmd, surface.mesh_data.indexBuffer.buffer, 0, VK_INDEX_TYPE_UINT32);
+	vkCmdDrawIndexed(cmd, surface.indices.size(), 1, 0, 0, 0);
+
+
+}
+
 void FFTRenderer::BuildOceanMesh()
 {
-	float tex_coord_scale = 2.f;
-	int GRID_DIM = surface.grid_dimensions;
+	float tex_coord_scale = 1.f;
+	int GRID_DIM = 512;
 	int HALF_DIM = GRID_DIM / 2;
 	int vertex_count = GRID_DIM + 1;
-	surface.vertices.resize(vertex_count * vertex_count);
-	surface.indices.resize(GRID_DIM * GRID_DIM * 2 * 3);
-
 	int idx = 0;
 	for (int z = -HALF_DIM; z <= HALF_DIM; ++z)
 	{
 		for (int x = -HALF_DIM; x <= HALF_DIM; ++x)
 		{
-			surface.vertices[idx].position = glm::vec3(float(x), 0.f, float(z));
-
+			OceanVertex vertex;
+			vertex.position = glm::vec4(float(x), 0.f, float(z),1.0f);
 			float u = ((float)x / GRID_DIM) + 0.5f;
 			float v = ((float)z / GRID_DIM) + 0.5f;
-			surface.vertices[idx++].uv = glm::vec2(u, v) * tex_coord_scale;
+			vertex.uv = glm::vec2(u, v) * tex_coord_scale;
+			vertex.pad = glm::vec2(0);
+			surface.vertices.push_back(vertex);
 		}
 	}
 
 	idx = 0;
-
+	
 	for (unsigned int y = 0; y < GRID_DIM; ++y)
 	{
-		for (unsigned int x = 0; x < GRID_DIM; ++x)
+		for (unsigned int x = 0; x < GRID_DIM-1; ++x)
 		{
-			surface.indices[idx++] = (vertex_count * y) + x;
+			uint32_t v0 = y * vertex_count + x;
+			uint32_t v1 = y * vertex_count + (x + 1);
+			uint32_t v2 = (y + 1) * vertex_count + x;
+			uint32_t v3 = (y + 1) * vertex_count + (x + 1);
+
+			surface.indices.push_back(v3);
+			surface.indices.push_back(v1);
+			surface.indices.push_back(v0);
+			
+			surface.indices.push_back(v0);
+			surface.indices.push_back(v2);
+			surface.indices.push_back(v3);
+			
+			/*surface.indices[idx++] = (vertex_count * y) + x;
 			surface.indices[idx++] = (vertex_count * (y + 1)) + x;
 			surface.indices[idx++] = (vertex_count * y) + x + 1;
 
 			surface.indices[idx++] = (vertex_count * y) + x + 1;
 			surface.indices[idx++] = (vertex_count * (y + 1)) + x;
 			surface.indices[idx++] = (vertex_count * (y + 1)) + x + 1;
+		*/
 		}
 	}
+	/*
+	for (unsigned int y = 0; y < GRID_DIM - 1; ++y)
+	{
+		for (unsigned int x = 0; x < GRID_DIM; ++x)
+		{
+			for (unsigned int k = 0; k < 2; ++k)
+			{
+				surface.indices.push_back(x * GRID_DIM * (y + k * 1));
+			}
+			uint32_t v0 = y * GRID_DIM + x;
+			uint32_t v1 = y * GRID_DIM + (x + 1);
+			uint32_t v2 = (y + 1) * GRID_DIM + x;
+			uint32_t v3 = (y + 1) * GRID_DIM + (x + 1);
 
+			surface.indices.push_back(v0);
+			surface.indices.push_back(v1);
+			surface.indices.push_back(v2);
+
+			surface.indices.push_back(v1);
+			surface.indices.push_back(v2);
+			surface.indices.push_back(v3);
+		}
+	}
+	*/
 	//Voxel texture visualization buffer
 	size_t buffer_size = surface.vertices.size() * sizeof(OceanVertex);
 	const size_t indexBufferSize = surface.indices.size() * sizeof(uint32_t);
@@ -462,46 +556,6 @@ void FFTRenderer::BuildOceanMesh()
 	resource_manager->DestroyBuffer(staging);
 }
 
-/*
-void FFTRenderer::GenerateWaves()
-{
-	float wavelengthMin = medianWavelength / (1.0f + wavelengthRange);
-	float wavelengthMax = medianWavelength * (1.0f + wavelengthRange);
-	float directionMin = medianDirection - directionalRange;
-	float directionMax = medianDirection + directionalRange;
-	
-	float speedMin = Mathf.Max(0.01f, medianSpeed - speedRange);
-	float speedMax = medianSpeed + speedRange;
-	float ampOverLen = medianAmplitude / medianWavelength;
-
-	float halfPlaneWidth = planeLength * 0.5f;
-	glm::vec3 minPoint = transform.TransformPoint(glm::vec3(-halfPlaneWidth, 0.0f, -halfPlaneWidth));
-	glm::vec3 maxPoint = transform.TransformPoint(glm::vec3(halfPlaneWidth, 0.0f, halfPlaneWidth));
-
-	std::random_device dev;
-	std::mt19937 rng(dev());
-	std::uniform_real_distribution<> waveRange(wavelengthMin, wavelengthMax);
-	std::uniform_real_distribution<> directionRange(directionMin, directionMax);
-	std::uniform_real_distribution<> speedRange(speedMin, speedMax);
-	std::uniform_real_distribution<> pointRange(minPoint.x * 2 , maxPoint.x * 2);
-
-	for (int wi = 0; wi < waveCount; ++wi) {
-		float wavelength = waveRange(rng);
-		float direction = directionRange(rng);
-		float amplitude = wavelength * ampOverLen;
-		float speed = speedRange(rng);
-		glm::vec2 origin = glm::vec2(pointRange(rng), pointRange(rng));
-
-		wave_params.waves[wi] = Wave(wavelength, amplitude, speed, direction, steepness, waveType, origin, waveFunction, waveCount);
-	}
-
-	void* waveDataPtr = nullptr;
-	vmaMapMemory(engine->_allocator, wave_params.wave_bufffer.allocation, &waveDataPtr);
-	shadowData* ptr = (shadowData*)shadowDataPtr;
-	memcpy(waveDataPtr, wave_params.waves, sizeof(Wave) * waveCount);
-	vmaUnmapMemory(engine->_allocator, wave_params.wave_bufffer.allocation);
-}
-*/
 void FFTRenderer::InitPipelines()
 {
 	PipelineCreationInfo info;
@@ -805,9 +859,9 @@ void FFTRenderer::InitDefaultData()
 
 	main_camera.type = Camera::CameraType::firstperson;
 	//mainCamera.flipY = true;
-	main_camera.movementSpeed = 2.5f;
+	main_camera.movementSpeed = 12.5f;
 	main_camera.setPerspective(45.0f, (float)_windowExtent.width / (float)_windowExtent.height, 0.1f, 1000.0f);
-	main_camera.setPosition(glm::vec3(-0.12f, -5.14f, -2.25f));
+	main_camera.setPosition(glm::vec3(0.0f, -25.f, 0.0f));
 	main_camera.setRotation(glm::vec3(-17.0f, 7.0f, 0.0f));
 
 	VkSamplerCreateInfo sampl = { .sType = VK_STRUCTURE_TYPE_SAMPLER_CREATE_INFO };
@@ -989,6 +1043,8 @@ void FFTRenderer::UpdateScene()
 	main_camera.updateAspectRatio(_aspect_width / _aspect_height);
 	scene_data.proj = main_camera.matrices.perspective;
 
+	ocean_scene_data.cam_pos = camPos;
+	ocean_scene_data.sun_direction = glm::vec3(scene_data.sunlightDirection);
 	// invert the Y direction on projection matrix so that we are more similar
 	// to opengl and gltf axis
 	scene_data.proj[1][1] *= -1;
@@ -1121,7 +1177,7 @@ void FFTRenderer::DebugComputePass(VkCommandBuffer cmd)
 	VkDescriptorSet debug_set = get_current_frame()._frameDescriptors.allocate(engine->_device, debug_layout);
 	DescriptorWriter writer;
 	writer.write_image(0, _drawImage.imageView, samplerLinear, VK_IMAGE_LAYOUT_GENERAL, VK_DESCRIPTOR_TYPE_STORAGE_IMAGE);
-	writer.write_image(1, surface.displacement_map.imageView, samplerLinear, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER);
+	writer.write_image(1, surface.height_derivative.imageView, samplerLinear, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER);
 	writer.update_set(engine->_device, debug_set);
 
 	//auto screen_dims = glm::vec2(_drawImage.imageExtent.width, _drawImage.imageExtent.height);
@@ -1312,18 +1368,34 @@ void FFTRenderer::DrawMain(VkCommandBuffer cmd)
 
 	sim_params.is_ping_phase = !sim_params.is_ping_phase;
 
-	if (debug_texture)
-		DebugComputePass(cmd);
-
 	//Perform FFT on frequency textures
 	DoIFFT(cmd, &surface.frequency_domain_texture, &surface.height_map);
 	DoIFFT(cmd, &surface.height_derivative_texture, &surface.height_derivative);
 	DoIFFT(cmd, &surface.horizontal_displacement_map, &surface.horizontal_map);
-	//DoIFFT(cmd, &surface.jacobian_XxZz_map);
-	//FFTGenerationPass(cmd);
-	//GenerateNormalMap(cmd);
 	WrapSpectrum(cmd);
+
+	
+	vkutil::transition_image(cmd, surface.displacement_map.image, VK_IMAGE_LAYOUT_GENERAL, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);
+	vkutil::transition_image(cmd, surface.height_derivative.image, VK_IMAGE_LAYOUT_GENERAL, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);
+
+	VkClearValue geometryClear{ 1.0,1.0,1.0,1.0f };
+	VkRenderingAttachmentInfo colorAttachment = vkinit::attachment_info(_drawImage.imageView,nullptr, &geometryClear, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL, true);
+	VkClearValue depthClear;
+	depthClear.depthStencil.depth = 1.0f;
+	VkRenderingAttachmentInfo depthAttachment = vkinit::attachment_info(_depthImage.imageView,nullptr, &depthClear, VK_IMAGE_LAYOUT_DEPTH_ATTACHMENT_OPTIMAL,true);
+	VkRenderingInfo renderInfo = vkinit::rendering_info(_windowExtent, &colorAttachment, &depthAttachment);
+
+	vkCmdBeginRendering(cmd, &renderInfo);
+	DrawOceanMesh(cmd);
+	vkCmdEndRendering(cmd);
+
+	vkutil::transition_image(cmd, surface.displacement_map.image, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL, VK_IMAGE_LAYOUT_GENERAL);
+	vkutil::transition_image(cmd, surface.height_derivative.image, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL, VK_IMAGE_LAYOUT_GENERAL);
+
 	image_barriers.clear();
+
+	if (debug_texture)
+		DebugComputePass(cmd);
 }
 
 void FFTRenderer::Draw()

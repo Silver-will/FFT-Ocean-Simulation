@@ -4,12 +4,13 @@
 #include "base_renderer.h"
 #include "../vk_engine.h"
 
-struct FFTSceneData {
-	glm::vec3 world_camera_pos;
+struct OceanUBO {
+	glm::vec3 cam_pos;
 	int show_wireframe;
 	glm::vec3 sun_direction;
 	int padding;
 };
+
 struct HeightSimParams {
 	float wind_angle = 45.f;
 	float wind_magnitude = 14.142135f;
@@ -39,8 +40,9 @@ struct FFTParams {
 	float foam_decay;
 };
 struct OceanVertex {
-	glm::vec3 position;
+	glm::vec4 position;
 	glm::vec2 uv;
+	glm::vec2 pad;
 };
 
 struct OceanSurface {
@@ -90,10 +92,8 @@ struct FFTRenderer : public BaseRenderer
 	void BuildOceanMesh();
 	void DrawOceanMesh(VkCommandBuffer cmd);
 	void GenerateInitialSpectrum(VkCommandBuffer cmd);
-	void PingPongPhasePass(VkCommandBuffer cmd);
 	void GenerateSpectrum(VkCommandBuffer cmd);
 	void DebugComputePass(VkCommandBuffer cmd);
-	void FFTGenerationPass(VkCommandBuffer cmd);
 	void PreProcessComputePass();
 	void WrapSpectrum(VkCommandBuffer cmd);
 	void DoIFFT(VkCommandBuffer cmd, AllocatedImage* input = nullptr, AllocatedImage* output = nullptr);
@@ -233,7 +233,7 @@ private:
 
 	FFTParams ocean_params;
 	HeightSimParams sim_params;
-	FFTSceneData fft_scene_data;
+	OceanUBO ocean_scene_data;
 
 	EngineStats stats;
 	std::vector<VkBufferMemoryBarrier> compute_barriers;

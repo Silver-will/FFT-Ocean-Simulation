@@ -9,8 +9,9 @@ layout (location = 1) out vec2 outUV;
 layout (set = 0, binding = 0) uniform sampler2D displacement_map;
 
 struct Vertex{
-	vec3 position;
+	vec4 position;
 	vec2 uv;
+	vec2 pad;
 };
 
 layout(buffer_reference, std430) readonly buffer VertexBuffer{ 
@@ -29,8 +30,12 @@ layout( push_constant ) uniform constants
 void main()
 {
 	Vertex v = PushConstants.vertexBuffer.vertices[gl_VertexIndex];
-	vec3 position = v.position + texture(displacement_map, v.uv).rgb * (512.f/PushConstants.ocean_size);
-	gl_Position = PushConstants.mvp * vec4(position, 1.f);
+	vec4 disp = texture(displacement_map, v.uv).rgba;
+	//disp = disp / PushConstants.ocean_size;
+	vec3 position = v.position.xyz;/* + texture(displacement_map, v.uv).rgb;*/
+	
+	vec4 displaced_pos = vec4(position + disp.rgb,1.f);
+	gl_Position = PushConstants.mvp * displaced_pos;
 
 	outFragPos = position;
 	outUV = v.uv;

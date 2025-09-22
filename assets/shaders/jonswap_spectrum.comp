@@ -1,4 +1,5 @@
 #version 460
+
 layout(local_size_x = 32, local_size_y = 32, local_size_z = 1)in;
 layout(set = 0, binding = 0,rg32f) uniform image2D inital_spectrum;
 layout(set = 0, binding = 1,rgba32f)uniform image2D wave_texture;
@@ -207,12 +208,14 @@ void main()
     float dispersion = WaveDispersion(kLength);
     float angle = WaveAngle(k);
     
-     vec2 rand = imageLoad(gaussian_noise, pixel_coord).rg;
+
+    vec2 rand = imageLoad(gaussian_noise, pixel_coord).rg;
     if(kLength > LowCutoff && kLength < HighCutoff)
     {
         vec2 h_0 = FourierWaveAmplitude(pixel_coord, k, dispersion, angle);
         imageStore(inital_spectrum, pixel_coord, vec4(h_0.x, h_0.y, 0.f, 0.f));
         imageStore(wave_texture, pixel_coord, vec4(k.x, k.y, dispersion, 1));
+    
     }
     else
     {

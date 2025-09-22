@@ -146,7 +146,7 @@ void FFTPipelineObject::build_pipelines(VulkanEngine* engine, PipelineCreationIn
 	//VkDescriptorSetLayout layouts[] = { engine->gpu_scene_data_descriptor_layout };
 
 	VkPipelineLayoutCreateInfo mesh_layout_info = vkinit::pipeline_layout_create_info();
-	mesh_layout_info.setLayoutCount = 1;
+	mesh_layout_info.setLayoutCount = info.layouts.size();
 	mesh_layout_info.pSetLayouts = info.layouts.data();
 	mesh_layout_info.pPushConstantRanges = &matrixRange;
 	mesh_layout_info.pushConstantRangeCount = 1;
@@ -160,11 +160,13 @@ void FFTPipelineObject::build_pipelines(VulkanEngine* engine, PipelineCreationIn
 	pipelineBuilder.set_shaders(oceanVertexShader, oceanFragmentShader);
 	pipelineBuilder.set_input_topology(VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST);
 	pipelineBuilder.set_polygon_mode(VK_POLYGON_MODE_FILL);
-	pipelineBuilder.set_cull_mode(VK_CULL_MODE_BACK_BIT, VK_FRONT_FACE_COUNTER_CLOCKWISE);
-	pipelineBuilder.set_multisampling_level(engine->msaa_samples);
+	pipelineBuilder.set_cull_mode(VK_CULL_MODE_NONE, VK_FRONT_FACE_COUNTER_CLOCKWISE);
+	pipelineBuilder.set_multisampling_level(VK_SAMPLE_COUNT_1_BIT);
 	pipelineBuilder.disable_blending();
 	pipelineBuilder.enable_depthtest(true, true, VK_COMPARE_OP_LESS_OR_EQUAL);
 	pipelineBuilder.set_depth_format(info.depthFormat);
+
+	pipelineBuilder.set_color_attachment_format(info.imageFormat);
 
 	pipelineBuilder._pipelineLayout = newLayout;
 
