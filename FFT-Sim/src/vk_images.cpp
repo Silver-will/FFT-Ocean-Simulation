@@ -4,6 +4,7 @@
 #include "vk_engine.h"
 
 #include <stb_image.h>
+#include <iostream>
 
 
 void vkutil::transition_image(VkCommandBuffer cmd, VkImage image, VkImageLayout currentLayout, VkImageLayout newLayout)
@@ -269,4 +270,89 @@ AllocatedImage vkutil::create_array_image(VkExtent3D size, VulkanEngine* engine,
 {
     AllocatedImage image;
     return image;
+}
+
+void vkutil::load_texture_stb(std::string path, int& width, int& height, int& nr_channels, void* data)
+{
+
+}
+
+AllocatedImage vkutil::load_cubemap_image(std::string_view path, VulkanEngine* engine, VkFormat format, VkImageUsageFlags usage, bool mipmapped)
+{
+    
+    std::vector<std::string>files{
+        "front.png",
+        "back.png",
+        "top.png",
+        "bottom.png",
+        "right.png",
+        "left.png",
+    };
+
+    char* texture_data[6];
+    std::string file_path(path);
+    int width{};
+    int height{};
+    int nr_channels{};
+    
+    char* test_data;
+    for (size_t i = 0; i < 6; i++)
+    {
+        texture_data[i] = (char*)stbi_load(std::string(file_path + files[i]).c_str(), &width, &height, &nr_channels,4);
+        if (!texture_data[i])
+         std::cout << "Texture null" << std::endl;
+    }
+    
+    const VkDeviceSize imageSize = width * height * 4 * 6; //4 since I always load my textures with an alpha channel, and multiply it by 6 because the image must have 6 layers.
+    const VkDeviceSize layerSize = imageSize / 6;
+
+    auto image_buffer = create_buffer(imageSize, VK_BUFFER_USAGE_TRANSFER_SRC_BIT, VMA_MEMORY_USAGE_CPU_TO_GPU, engine);
+
+    void* data = nullptr;
+    vmaMapMemory(engine->_allocator, image_buffer.allocation, &data);
+    for (size_t i = 0; i < 6; i++)
+    {
+        memcpy((char*)data + (layerSize * i), texture_data[i], static_cast<size_t>(layerSize));
+    }
+    vmaUnmapMemory(engine->_allocator, image_buffer.allocation);
+    
+    VkExtent3D image_extent;
+    image_extent.width = width;
+    image_extent.height = height;
+    image_extent.depth = 1;
+    AllocatedImage cube_image = create_cubemap_image(image_extent,engine,format,usage,true);
+
+    engine->immediate_submit([&](VkCommandBuffer cmd)
+        {
+            vkutil::transition_image(cmd, cube_image.image, VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL);
+            std::vector<VkBufferImageCopy> bufferCopyRegions;
+
+            for (uint32_t face = 0; face < 6; face++)
+            {
+                size_t offset = face * layerSize;
+                VkBufferImageCopy bufferCopyRegion = {};
+                bufferCopyRegion.imageSubresource.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+                bufferCopyRegion.imageSubresource.mipLevel = 0;
+                bufferCopyRegion.imageSubresource.baseArrayLayer = face;
+                bufferCopyRegion.imageSubresource.layerCount = 1;
+                bufferCopyRegion.imageExtent.width = width;
+                bufferCopyRegion.imageExtent.height = height;
+                bufferCopyRegion.imageExtent.depth = 1;
+                bufferCopyRegion.bufferOffset = offset;
+                bufferCopyRegions.push_back(bufferCopyRegion);
+            }
+
+            vkCmdCopyBufferToImage(cmd, image_buffer.buffer, cube_image.image, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, bufferCopyRegions.size(),
+                bufferCopyRegions.data());
+
+            if (mipmapped) {
+                vkutil::generate_mipmaps(cmd, cube_image.image, VkExtent2D{ image_extent.width,image_extent.height });
+            }
+            else {
+                vkutil::transition_image(cmd, cube_image.image, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
+                    VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);
+            }
+        });
+
+    return cube_image;
 }

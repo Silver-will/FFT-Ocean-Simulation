@@ -1,7 +1,6 @@
 #include "resource_manager.h"
 #include "stb_image.h"
 #include "vk_engine.h"
-#include <print>
 
 #define USE_BINDLESS
 

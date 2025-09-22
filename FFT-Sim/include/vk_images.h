@@ -12,7 +12,8 @@ namespace vkutil {
 	AllocatedImage create_image_empty(VkExtent3D size, VkFormat format, VkImageUsageFlags usage, VulkanEngine* engine, VkImageViewType viewType = VK_IMAGE_VIEW_TYPE_2D, bool mipmapped = false, int layers = 1, VkSampleCountFlagBits msaaSamples = VK_SAMPLE_COUNT_1_BIT, int mipLevels=-1 );
 	AllocatedImage create_image(void* data, VkExtent3D size, VkFormat format, VkImageUsageFlags usage, VulkanEngine* engine, bool mipmapped = false);
 	void destroy_image(const AllocatedImage& img, VulkanEngine* engine);
-	AllocatedImage load_cubemap_image(std::string_view path, VkExtent3D size, VulkanEngine* engine, VkFormat format, VkImageUsageFlags usage, bool mipmapped = false);
+	AllocatedImage load_cubemap_image(std::string_view path, VulkanEngine* engine, VkFormat format, VkImageUsageFlags usage, bool mipmapped = false);
+	void load_texture_stb(std::string path, int& width, int& height, int& nr_channels, void* data);
 	AllocatedImage create_cubemap_image(VkExtent3D size, VulkanEngine* engine, VkFormat format, VkImageUsageFlags usage, bool mipmapped = false);
 	AllocatedImage create_array_image(VkExtent3D size, VulkanEngine* engine, VkFormat format, VkImageUsageFlags usage, bool mipmapped = false);
 	

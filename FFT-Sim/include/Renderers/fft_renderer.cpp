@@ -859,6 +859,8 @@ void FFTRenderer::InitDefaultData()
 	surface.height_derivative_texture = resource_manager->CreateImage(oceanExtent, VK_FORMAT_R32G32B32A32_SFLOAT, VK_IMAGE_USAGE_SAMPLED_BIT | VK_IMAGE_USAGE_STORAGE_BIT);
 	surface.jacobian_XxZz_map = resource_manager->CreateImage(oceanExtent, VK_FORMAT_R32G32B32A32_SFLOAT, VK_IMAGE_USAGE_SAMPLED_BIT | VK_IMAGE_USAGE_STORAGE_BIT);
 	surface.jacobian_xz_map = resource_manager->CreateImage(oceanExtent, VK_FORMAT_R32G32_SFLOAT, VK_IMAGE_USAGE_SAMPLED_BIT | VK_IMAGE_USAGE_STORAGE_BIT);
+	std::string cubemap_path(assets_path + "/textures/");
+	surface.sky_image = vkutil::load_cubemap_image(cubemap_path,engine, VK_FORMAT_R8G8B8A8_UNORM, VK_IMAGE_USAGE_SAMPLED_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT |VK_IMAGE_USAGE_SAMPLED_BIT );
 
 	ocean_params.log_size = log2(RES);
 	//Create default images

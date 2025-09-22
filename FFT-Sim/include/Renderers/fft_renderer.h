@@ -70,6 +70,7 @@ struct OceanSurface {
 	AllocatedImage horizontal_map;
 	AllocatedImage height_map;
 	AllocatedImage displacement_map;
+	AllocatedImage sky_image;
 };
 struct FFTRenderer : public BaseRenderer
 {
