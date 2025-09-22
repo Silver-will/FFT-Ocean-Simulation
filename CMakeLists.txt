@@ -28,6 +28,8 @@ find_package(Vulkan REQUIRED)
 
 if (CMAKE_CXX_COMPILER_ID MATCHES "MSVC")
     add_compile_options(/std:c++17)
+    #add_compile_options(/permissive-)
+    #add_compile_options(/W4)
 else()
     add_compile_options(-std=c++17)
 endif()
@@ -57,7 +59,8 @@ target_include_directories(${PROJECT_NAME} PRIVATE
     ${Vulkan_INCLUDE_DIRS}
 )
 
-set(VULKAN_LIBRARY "$ENV{VK_SDK_PATH}/Lib/vulkan-1.lib")
+find_package(Vulkan REQUIRED)
+
 target_compile_definitions(${PROJECT_NAME} PRIVATE
                             ENGINE_ASSET_PATH="${CMAKE_CURRENT_LIST_DIR}/assets")
 
@@ -65,7 +68,7 @@ target_link_libraries(${PROJECT_NAME}
     stb
     imgui
     glfw
-    ${VULKAN_LIBRARY}
+    Vulkan::Vulkan
     vk-bootstrap::vk-bootstrap
     ${CMAKE_DL_LIBS}
     GPUOpen::VulkanMemoryAllocator
