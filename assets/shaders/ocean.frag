@@ -15,6 +15,8 @@ layout(set = 0, binding = 2) uniform  SceneData{
     int padding;
 } sceneData;
 
+layout(set=0,binding=3) uniform samplerCube environmentMap;
+
 vec3 HDR(vec3 color, float exposure)
 {
     return 1.0 - exp(-color * exposure);
@@ -39,6 +41,9 @@ void main()
     
     vec3 color = sky + water;
     
+    vec3 envColor = texture(environmentMap, vec3(0.5)).rgb;
+
+    color += (envColor * 0.01);
     outFragColor = vec4(HDR(color,exposure), 0.f);
     /*
     if (sceneData.show_wireframe == 1)
