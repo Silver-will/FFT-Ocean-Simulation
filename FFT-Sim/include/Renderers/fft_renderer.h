@@ -9,11 +9,23 @@ struct OceanUBO {
 	int show_wireframe;
 	glm::vec3 sun_direction;
 	int padding;
+	glm::vec4 sun_color;
+	glm::vec4 diffuse_reflectance = glm::vec4(0.01, 0.06, 0.1,1.0f);
+	float fresnel_normal_strength = 0.224f;
+	float fresnel_shininess = 5.0f;
+	float fresnel_bias = 0.02f;
+	float specular_reflectance = 0.04f;
+	float specular_normal_strength = 1.0f;
+	float shininess = 1.0f;
+	float fresnel_strength = 1.0f;
+	float foam;
+	glm::vec4 ambient = glm::vec4(0.02, 0.04, 0.06, 1);
+	glm::vec4 fresnel_color = glm::vec4(1.0f);
 };
 
 struct HeightSimParams {
 	float wind_angle = 45.f;
-	float wind_magnitude = 14.142135f;
+	float wind_magnitude = 5.142135f;
 	int sun_elevation = 0.f;
 	int sun_azimuth = 90.f;
 	bool wireframe;

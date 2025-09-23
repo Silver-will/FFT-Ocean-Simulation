@@ -804,6 +804,10 @@ void FFTRenderer::InitDefaultData()
 {
 	assets_path = GetAssetPath();
 
+	directLight = DirectionalLight(glm::vec4(0.234f, -0.410f, 1.791f, 1.0f), glm::vec4(1.5f), glm::vec4(1.0f));
+	//W stores light intensity
+	directLight.direction.w = 1.0f;
+
 	//Create FFT resource images
 	uint32_t RES = surface.texture_dimensions;
 
@@ -862,7 +866,7 @@ void FFTRenderer::InitDefaultData()
 	surface.jacobian_XxZz_map = resource_manager->CreateImage(oceanExtent, VK_FORMAT_R32G32B32A32_SFLOAT, VK_IMAGE_USAGE_SAMPLED_BIT | VK_IMAGE_USAGE_STORAGE_BIT);
 	surface.jacobian_xz_map = resource_manager->CreateImage(oceanExtent, VK_FORMAT_R32G32_SFLOAT, VK_IMAGE_USAGE_SAMPLED_BIT | VK_IMAGE_USAGE_STORAGE_BIT);
 	std::string cubemap_path(assets_path + "/textures/");
-	surface.sky_image = vkutil::load_cubemap_image(cubemap_path,engine, VK_FORMAT_R8G8B8A8_UNORM, VK_IMAGE_USAGE_SAMPLED_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT |VK_IMAGE_USAGE_SAMPLED_BIT );
+	surface.sky_image = vkutil::load_cubemap_image(cubemap_path,engine, VK_FORMAT_R8G8B8A8_UNORM, VK_IMAGE_USAGE_SAMPLED_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT |VK_IMAGE_USAGE_SAMPLED_BIT,true );
 
 	ocean_params.log_size = log2(RES);
 	//Create default images
@@ -874,10 +878,11 @@ void FFTRenderer::InitDefaultData()
 
 	main_camera.type = Camera::CameraType::firstperson;
 	//mainCamera.flipY = true;
-	main_camera.movementSpeed = 12.5f;
+	main_camera.movementSpeed = 45.5f;
 	main_camera.setPerspective(45.0f, (float)_windowExtent.width / (float)_windowExtent.height, 0.1f, 1000.0f);
 	main_camera.setPosition(glm::vec3(0.0f, -25.f, 0.0f));
-	main_camera.setRotation(glm::vec3(-17.0f, 7.0f, 0.0f));
+	main_camera.setRotation(glm::vec3(-1.0f, -3.6f, 0.0f));
+	main_camera.setRotationSpeed(0.5f);
 
 	VkSamplerCreateInfo sampl{};
 	sampl.sType = VK_STRUCTURE_TYPE_SAMPLER_CREATE_INFO;
@@ -904,7 +909,7 @@ void FFTRenderer::InitDefaultData()
 	cubeSampl.magFilter = VK_FILTER_LINEAR;
 	cubeSampl.minFilter = VK_FILTER_LINEAR;
 	cubeSampl.mipmapMode = VK_SAMPLER_MIPMAP_MODE_LINEAR;
-	cubeSampl.addressModeU = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE;
+	cubeSampl.addressModeU = VK_SAMPLER_ADDRESS_MODE_REPEAT;
 	cubeSampl.addressModeV = cubeSampl.addressModeU;
 	cubeSampl.addressModeW = cubeSampl.addressModeU;
 	cubeSampl.mipLodBias = 0.0f;
@@ -1067,7 +1072,8 @@ void FFTRenderer::UpdateScene()
 	scene_data.proj = main_camera.matrices.perspective;
 
 	ocean_scene_data.cam_pos = camPos;
-	ocean_scene_data.sun_direction = glm::vec3(scene_data.sunlightDirection);
+	ocean_scene_data.sun_direction = glm::vec3(directLight.direction);
+	ocean_scene_data.sun_color = directLight.color;
 	// invert the Y direction on projection matrix so that we are more similar
 	// to opengl and gltf axis
 	scene_data.proj[1][1] *= -1;
@@ -1439,7 +1445,7 @@ void FFTRenderer::Draw()
 	uint32_t swapchainImageIndex;
 	VkResult e = vkAcquireNextImageKHR(engine->_device, swapchain, 1000000000, get_current_frame()._swapchainSemaphore, nullptr, &swapchainImageIndex);
 
-	if (e == VK_ERROR_OUT_OF_DATE_KHR) {
+	if (e == VK_ERROR_OUT_OF_DATE_KHR ||  e == VK_SUBOPTIMAL_KHR) {
 		resize_requested = true;
 		return;
 	}
@@ -1536,7 +1542,7 @@ void FFTRenderer::Draw()
 	presentInfo.pImageIndices = &swapchainImageIndex;
 
 	VkResult presentResult = vkQueuePresentKHR(engine->_graphicsQueue, &presentInfo);
-	if (e == VK_ERROR_OUT_OF_DATE_KHR) {
+	if (e == VK_ERROR_OUT_OF_DATE_KHR || e == VK_SUBOPTIMAL_KHR) {
 		resize_requested = true;
 		return;
 	}
@@ -1690,30 +1696,49 @@ void FFTRenderer::Run()
 void FFTRenderer::ResizeSwapchain()
 {
 	vkDeviceWaitIdle(engine->_device);
+	if (!stop_rendering)
+	{
+		DestroySwapchain();
 
-	DestroySwapchain();
+		VkSurfaceCapabilitiesKHR caps;
+		vkGetPhysicalDeviceSurfaceCapabilitiesKHR(engine->_chosenGPU,engine->_surface, &caps);
 
-	int width, height;
-	glfwGetWindowSize(engine->window, &width, &height);
-	_windowExtent.width = width;
-	_windowExtent.height = height;
+		int width, height;
+		glfwGetWindowSize(engine->window, &width, &height);
 
-	_aspect_width = width;
-	_aspect_height = height;
+		VkExtent2D extent;
+		if (caps.currentExtent.width != UINT32_MAX) {
+		// Most platforms (X11, Wayland, Windows)
+			_windowExtent = caps.currentExtent;
+			_aspect_width = _windowExtent.width;
+			_aspect_height = _windowExtent.height;
+		}
+		else {
+			_windowExtent.width = width;
+			_windowExtent.height = height;
+			_aspect_width = width;
+			_aspect_height = height;
 
-	CreateSwapchain(_windowExtent.width, _windowExtent.height);
+		}
+	
+		CreateSwapchain(_windowExtent.width, _windowExtent.height);
 
-	//Destroy and recreate render targets
-	resource_manager->DestroyImage(_drawImage);
+		//Destroy and recreate render targets
+		resource_manager->DestroyImage(_drawImage);
+		resource_manager->DestroyImage(_depthImage);
 
-	VkExtent3D ImageExtent{
-		width,
-		height,
-		1
-	};
-	_drawImage = vkutil::create_image_empty(ImageExtent, VK_FORMAT_R16G16B16A16_SFLOAT, VK_IMAGE_USAGE_TRANSFER_SRC_BIT |
-				VK_IMAGE_USAGE_STORAGE_BIT | VK_IMAGE_USAGE_SAMPLED_BIT | VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT, 
-				engine, VK_IMAGE_VIEW_TYPE_2D, false, 1);
+		VkExtent3D ImageExtent{
+			_aspect_width,
+			_aspect_height,
+			1
+		};
+		_drawImage = vkutil::create_image_empty(ImageExtent, VK_FORMAT_R16G16B16A16_SFLOAT, VK_IMAGE_USAGE_TRANSFER_SRC_BIT |
+			VK_IMAGE_USAGE_STORAGE_BIT | VK_IMAGE_USAGE_SAMPLED_BIT | VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT,
+			engine, VK_IMAGE_VIEW_TYPE_2D, false, 1);
+
+		_depthImage = vkutil::create_image_empty(ImageExtent, VK_FORMAT_D32_SFLOAT, VK_IMAGE_USAGE_SAMPLED_BIT | VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT,
+			engine, VK_IMAGE_VIEW_TYPE_2D, false, 1);
+	}
 	resize_requested = false;
 }
 
@@ -1751,7 +1776,7 @@ void FFTRenderer::DrawUI()
 	ImGui::SetNextWindowSize(ImVec2(550, 680), ImGuiCond_FirstUseEver);
 
 	bool p_open = true;
-	if (!ImGui::Begin("Black key", &p_open, window_flags))
+	if (!ImGui::Begin("FFT ocean simulation", &p_open, window_flags))
 	{
 		ImGui::End();
 		return;
@@ -1759,12 +1784,10 @@ void FFTRenderer::DrawUI()
 
 	if (ImGui::CollapsingHeader("Ocean"))
 	{
-		bool wind_mag_changed = ImGui::SliderFloat("Wind Magnitude", &sim_params.wind_magnitude, 10.f, 50.f);
+		bool wind_mag_changed = ImGui::SliderFloat("Wind Magnitude", &sim_params.wind_magnitude, 2.f, 50.f);
 		bool wind_dir_changed = ImGui::SliderFloat("Wind Angle", &sim_params.wind_angle, 0, 359);
 
-		ImGui::SliderFloat("Choppiness", &ocean_params.displacement_factor, 0.f, 7.5f);
-		ImGui::SliderInt("Sun Elevation", &sim_params.sun_elevation, 0, 89);
-		ImGui::SliderInt("Sun Azimuth", &sim_params.sun_azimuth, 0, 359);
+		ImGui::SliderFloat("Choppiness", &ocean_params.displacement_factor, 0.f, 3.5f);
 		ImGui::Checkbox("Wireframe", &sim_params.wireframe);
 		ImGui::Checkbox("Debug texture", &debug_texture);
 
@@ -1779,7 +1802,7 @@ void FFTRenderer::DrawUI()
 		{
 			ImGui::SeparatorText("direction");
 			float pos[3] = { directLight.direction.x, directLight.direction.y, directLight.direction.z };
-			ImGui::SliderFloat3("x,y,z", pos, -7, 7);
+			ImGui::SliderFloat3("x,y,z", pos, -12, 12);
 			directLight.direction = glm::vec4(pos[0], pos[1], pos[2], 0.0f);
 
 			ImGui::SeparatorText("color");
@@ -1788,41 +1811,16 @@ void FFTRenderer::DrawUI()
 			directLight.color = glm::vec4(col[0], col[1], col[2], col[3]);
 			ImGui::TreePop();
 		}
-	}
-	if (ImGui::CollapsingHeader("Post processing"))
-	{
-		ImGui::SeparatorText("Bloom");
-		ImGui::SliderFloat("Bloom filter Radius", &bloom_filter_radius, 0.01f, 2.0f);
-		ImGui::SliderFloat("Bloom strength", &bloom_strength, 0.01f, 1.0f);
-	}
-	if (ImGui::CollapsingHeader("Debugging"))
-	{
-		ImGui::Checkbox("Read buffer", &readDebugBuffer);
-		ImGui::Checkbox("Display buffer", &debugBuffer);
-		std::string breh;
-		if (debugBuffer)
+
+		if (ImGui::TreeNode("Shading settings"))
 		{
-			auto buffer = resource_manager->GetReadBackBuffer();
-			void* data_ptr = nullptr;
-			std::vector<uint32_t> buffer_values;
-			buffer_values.resize(buffer->info.size);
-			vmaMapMemory(engine->_allocator, buffer->allocation, &data_ptr);
-			uint32_t* buffer_ptr = (uint32_t*)data_ptr;
-			memcpy(buffer_values.data(), buffer_ptr, buffer->info.size);
-			vmaUnmapMemory(engine->_allocator, buffer->allocation);
-
-
-			for (size_t i = 0; i < buffer_values.size(); i++)
-			{
-				auto string = std::to_string((double)buffer_values[i]);
-				breh += string + " ";
-
-				if (i % 10 == 0)
-					breh += "\n";
-			}
-
+			ImGui::SeparatorText("Fresnel settings");
+			ImGui::SliderFloat("Fresnel strength", &ocean_scene_data.fresnel_strength, 0.1f, 3.0f);
+			ImGui::SliderFloat("Fresnel shininess", &ocean_scene_data.fresnel_shininess, 0.1f, 20.0f);
+			ImGui::SliderFloat("Fresnel bias", &ocean_scene_data.fresnel_bias, 0.1f, 1.0f);
+			ImGui::SliderFloat("Fresnel normal strength", &ocean_scene_data.fresnel_normal_strength, 0.1f, 5.0f);
+			ImGui::TreePop();
 		}
-		ImGui::Text(breh.c_str());
 	}
 
 	if (ImGui::CollapsingHeader("Engine Stats"))

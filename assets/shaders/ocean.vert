@@ -5,6 +5,8 @@
 
 layout (location = 0) out vec3 outFragPos;
 layout (location = 1) out vec2 outUV;
+layout (location = 2) out vec3 outNormal;
+
 
 layout (set = 0, binding = 0) uniform sampler2D displacement_map;
 
@@ -27,6 +29,19 @@ layout( push_constant ) uniform constants
 } PushConstants;
 
 
+vec3 CalcSlopeNormal(vec2 texCoord)
+{   
+	float textureDelta = 1/512.0;
+	
+	float left = texture(displacement_map, texCoord + vec2(-textureDelta,0)).r;
+	float right = texture(displacement_map, texCoord + vec2(textureDelta,0)).r;
+	float up = texture(displacement_map, texCoord + vec2(0,textureDelta)).r;
+	float down = texture(displacement_map, texCoord + vec2(0,-textureDelta)).r;
+	
+	vec3 normal = normalize(vec3(left - right,1.0f, up - down));
+	return normalize(normal);
+}
+
 void main()
 {
 	Vertex v = PushConstants.vertexBuffer.vertices[gl_VertexIndex];
@@ -36,8 +51,9 @@ void main()
 	
 	vec4 displaced_pos = vec4(position + disp.rgb,1.f);
 	gl_Position = PushConstants.mvp * displaced_pos;
-
-	outFragPos = position;
+	
+	outNormal = CalcSlopeNormal(v.uv);
+	outFragPos = displaced_pos.rgb;
 	outUV = v.uv;
 
 }

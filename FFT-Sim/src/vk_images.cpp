@@ -346,7 +346,7 @@ AllocatedImage vkutil::load_cubemap_image(std::string_view path, VulkanEngine* e
                 bufferCopyRegions.data());
 
             if (mipmapped) {
-                vkutil::generate_mipmaps(cmd, cube_image.image, VkExtent2D{ image_extent.width,image_extent.height });
+                vkutil::generate_mipmaps(cmd, cube_image.image, VkExtent2D{ image_extent.width,image_extent.height }, 6);
             }
             else {
                 vkutil::transition_image(cmd, cube_image.image, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,

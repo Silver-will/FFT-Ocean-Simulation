@@ -274,6 +274,12 @@ void Camera::setMovementSpeed(float movementSpeed)
 
 void Camera::processMouseMovement(GLFWwindow* window, double xPos, double yPos)
 {
+	if (first_update)
+	{
+		last_x = xPos;
+		last_y = yPos;
+		first_update = false;
+	}
 	if (cursor_locked)
 	{
 		int32_t dx = (int32_t)last_x - xPos;

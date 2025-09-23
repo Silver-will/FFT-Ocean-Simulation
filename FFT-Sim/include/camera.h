@@ -25,6 +25,7 @@ public:
 	bool updated = true;
 	bool flipY = false;
 	bool cursor_locked = true;
+	bool first_update = true;
 	struct
 	{
 		glm::mat4 perspective;
