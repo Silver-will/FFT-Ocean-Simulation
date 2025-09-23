@@ -16,7 +16,7 @@ int main(int argc, char const *argv[])
     for (unsigned int itr = 0; itr < elementVertices.cols(); itr ++)
     {
         const Eigen::Vector3d vertex = elementVertices.col(itr);
-        std::cout << "Point: (" <<  vertex.x() << "," << vertex.y() << ")\tHeight: " << waveHeights[itr] << std::endl;
+        std::cout << "Point: (" <<  vertex.x() << "," << vertex.y() << "," << vertex.z() << ")\tHeight: " << waveHeights[itr] << std::endl;
     }
     return 0;
 }
