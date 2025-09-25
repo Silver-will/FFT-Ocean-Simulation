@@ -16,7 +16,7 @@ int main(int argc, char* argv[])
 	float y = 12;
 	float t = 5;
 	std::cout << "Your Height value at Point ("<<x<<", " <<y<<")"<<"= \n" << getHeight(0.3, 12, 5, FFTOceanSimulation.get()) << std::endl;
-	//FFTOceanSimulation->Run();
+	FFTOceanSimulation->Run();
 	FFTOceanSimulation->Cleanup();
 	engine->cleanup();
 

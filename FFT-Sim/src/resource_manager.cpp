@@ -50,6 +50,17 @@ void ResourceManager::init(VulkanEngine* engine_ptr) {
     sampl.magFilter = VK_FILTER_LINEAR;
     sampl.minFilter = VK_FILTER_LINEAR;
     vkCreateSampler(engine->_device, &sampl, nullptr, &defaultSamplerLinear);
+
+
+    deletionQueue.push_function([=]() {
+        vkDestroySampler(engine->_device, defaultSamplerLinear, nullptr);
+        vkDestroySampler(engine->_device, defaultSamplerNearest, nullptr);
+        DestroyImage(errorCheckerboardImage);
+        DestroyImage(_whiteImage);
+        DestroyImage(_blackImage);
+        DestroyImage(_greyImage);
+        DestroyImage(storageImage);
+        });
     
 }
 
@@ -131,6 +142,8 @@ ResourceManager::ResourceManager(VulkanEngine* engine)
     sampl.magFilter = VK_FILTER_LINEAR;
     sampl.minFilter = VK_FILTER_LINEAR;
     vkCreateSampler(engine->_device, &sampl, nullptr, &defaultSamplerLinear);
+
+
 }
 void ResourceManager::cleanup()
 {

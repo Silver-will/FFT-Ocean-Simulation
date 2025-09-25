@@ -308,13 +308,9 @@ void FFTRenderer::InitRenderTargets()
 	VK_CHECK(vkCreateImageView(engine->_device, &dRview_info, nullptr, &_depthImage.imageView));
 
 	//add to deletion queues
-	resource_manager->deletionQueue.push_function([=]() {
-		vkDestroyImageView(engine->_device, _drawImage.imageView, nullptr);
-		vmaDestroyImage(engine->_allocator, _drawImage.image, _drawImage.allocation);
-
-		vkDestroyImageView(engine->_device, _depthImage.imageView, nullptr);
-		vmaDestroyImage(engine->_allocator, _depthImage.image, _drawImage.allocation);
-		});
+	
+	
+	
 }
 
 
@@ -669,6 +665,11 @@ void FFTRenderer::BuildOceanMesh()
 
 	vmaUnmapMemory(resource_manager->engine->_allocator, staging.allocation);
 	resource_manager->DestroyBuffer(staging);
+
+	_mainDeletionQueue.push_function([=]() {
+		resource_manager->DestroyBuffer(surface.mesh_data.vertexBuffer);
+		resource_manager->DestroyBuffer(surface.mesh_data.indexBuffer);
+		});
 }
 
 void FFTRenderer::InitPipelines()
@@ -951,6 +952,11 @@ void FFTRenderer::InitComputePipelines()
 		resource_manager->DestroyPSO(copy_pso);
 		resource_manager->DestroyPSO(phase_pso);
 		resource_manager->DestroyPSO(copy_buffer_pso);
+		resource_manager->DestroyPSO(butterfly_pso);
+		resource_manager->DestroyPSO(conjugate_spectrum_pso);
+		resource_manager->DestroyPSO(lookup_value_pso);
+		resource_manager->DestroyPSO(permute_scale_pso);
+		resource_manager->DestroyPSO(wrap_spectrum_pso);
 		});
 }
 
@@ -1078,7 +1084,7 @@ void FFTRenderer::InitDefaultData()
 	vkCreateSampler(engine->_device, &cubeSampl, nullptr, &cubeMapSampler);
 
 	//< default_img
-
+	
 	_mainDeletionQueue.push_function([=]() {
 		resource_manager->DestroyImage(surface.inital_spectrum_texture);
 		resource_manager->DestroyImage(surface.conjugated_spectrum_texture);
@@ -1095,8 +1101,9 @@ void FFTRenderer::InitDefaultData()
 		resource_manager->DestroyImage(surface.frequency_domain_texture);
 		resource_manager->DestroyImage(surface.jacobian_XxZz_map);
 		resource_manager->DestroyImage(surface.jacobian_xz_map);
+		resource_manager->DestroyImage(surface.height_derivative_texture);
 		resource_manager->DestroyImage(storage_image);
-		resource_manager->DestroyImage(_skyImage);
+		resource_manager->DestroyImage(surface.sky_image);
 		resource_manager->DestroyBuffer(surface.height_buffer);
 		resource_manager->DestroyBuffer(surface.sampled_value);
 		vkDestroySampler(engine->_device, defaultSamplerLinear, nullptr);
@@ -1104,6 +1111,7 @@ void FFTRenderer::InitDefaultData()
 		vkDestroySampler(engine->_device, cubeMapSampler, nullptr);
 		vkDestroySampler(engine->_device, samplerLinear, nullptr);
 		});
+	
 }
 
 void FFTRenderer::CreateSwapchain(uint32_t width, uint32_t height)
@@ -1215,6 +1223,9 @@ void FFTRenderer::InitImgui()
 void FFTRenderer::DestroySwapchain()
 {
 	vkDestroySwapchainKHR(engine->_device, swapchain, nullptr);
+
+	resource_manager->DestroyImage(_depthImage);
+	resource_manager->DestroyImage(_drawImage);
 
 	// destroy swapchain resources
 	for (int i = 0; i < swapchain_image_views.size(); i++) {
@@ -1900,12 +1911,15 @@ void FFTRenderer::DrawUI()
 			ImGui::TreePop();
 		}
 	}
-	if (ImGui::CollapsingHeader("Ouptut"))
+	if (ImGui::CollapsingHeader("Help"))
 	{
-		ImGui::Text("Clicking the button below will save the wave height values\n");
-		ImGui::InputFloat("Time value of simulation:", &sim_params.time_value);
-		sim_params.save_height_values = ImGui::Button("Get height values");
+		ImGui::Text("Use WASD to move around the scene.\n");
+		ImGui::Text("Press C on your keyboard to swap between camera made and input mode.\n");
+		ImGui::Text("You can modify camera parameters by going to the InitDefaultData function\nwithin fft_renderer.cpp and changing the parameters of mainCamera\n");
+		ImGui::Text("Toggle wind speed to increase the height of waves and speed.\nToggle wind angle to change direction in which the sea blows \n");
+		ImGui::Text("Choppiness is for horizontal displacement.\nLighting settings can be used to change the effects of the directional lights on the scene\n");
 	}
+
 
 	if (ImGui::CollapsingHeader("Engine Stats"))
 	{
