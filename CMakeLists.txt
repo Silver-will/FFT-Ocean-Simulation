@@ -28,8 +28,6 @@ find_package(Vulkan REQUIRED)
 
 if (CMAKE_CXX_COMPILER_ID MATCHES "MSVC")
     add_compile_options(/std:c++17)
-    #add_compile_options(/permissive-)
-    #add_compile_options(/W4)
 else()
     add_compile_options(-std=c++17)
 endif()
@@ -56,10 +54,9 @@ target_include_directories(${PROJECT_NAME} PRIVATE
     third_party/imgui/include
     third_party/vk-bootstrap/src
     third_party/stb
+    third_party/eigen
     ${Vulkan_INCLUDE_DIRS}
 )
-
-find_package(Vulkan REQUIRED)
 
 target_compile_definitions(${PROJECT_NAME} PRIVATE
                             ENGINE_ASSET_PATH="${CMAKE_CURRENT_LIST_DIR}/assets")
