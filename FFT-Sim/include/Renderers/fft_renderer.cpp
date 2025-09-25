@@ -1816,10 +1816,6 @@ void FFTRenderer::ResizeSwapchain()
 	
 		CreateSwapchain(_windowExtent.width, _windowExtent.height);
 
-		//Destroy and recreate render targets
-		resource_manager->DestroyImage(_drawImage);
-		resource_manager->DestroyImage(_depthImage);
-
 		VkExtent3D ImageExtent{
 			_aspect_width,
 			_aspect_height,
