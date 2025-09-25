@@ -235,7 +235,7 @@ void VulkanEngine::init_vulkan(VkPhysicalDeviceFeatures baseFeatures, VkPhysical
 	//make the vulkan instance, with basic debug features
 	auto inst_ret = builder.set_app_name("Executor")
 		.request_validation_layers(bUseValidationLayers)
-		.add_validation_feature_enable(validation_feature_enables)
+		//.add_validation_feature_enable(validation_feature_enables)
 		.use_default_debug_messenger()
 		.require_api_version(1, 3, 0)
 		.enable_extension("VK_KHR_get_physical_device_properties2")
