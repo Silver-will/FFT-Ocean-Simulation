@@ -5,7 +5,8 @@
 file(GLOB_RECURSE SRC_FILES
     include/*.h 
     include/*.cpp
-    src/*.cpp)
+    src/*.cpp
+    )
 
 # Add source to this project's executable.
 add_executable (${PROJECT_NAME} "main.cpp" ${SRC_FILES})

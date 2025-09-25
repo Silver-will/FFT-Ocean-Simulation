@@ -1,0 +1,20 @@
+#version 460 core
+
+layout(local_size_x = 1, local_size_y = 1, local_size_z = 1) in;
+
+layout(set = 0, binding = 0) uniform sampler2D displacement_map;
+layout (set = 0, binding = 1) buffer heightValues{
+    float height;
+};
+
+layout( push_constant ) uniform constants
+{
+	vec2 sample_position;
+};
+
+void main()
+{
+	//vec2 sam_pos = (sample_position / float(resolution)) + 0.5f;
+	vec4 value = texture(displacement_map, sample_position);
+	height = value.y;
+}

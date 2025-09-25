@@ -1,0 +1,26 @@
+#version 460 core
+
+layout(local_size_x = 32, local_size_y = 32, local_size_z = 1) in;
+
+layout(set = 0, binding = 0, rgba32f) uniform readonly image2D displacement_map;
+layout (set = 0, binding = 1) buffer heightValues{
+    float height_values[];
+};
+
+layout( push_constant ) uniform constants
+{
+	int resolution;
+};
+
+void main()
+{
+	ivec2 pos = ivec2(gl_GlobalInvocationID.xy);
+	ivec2 size = imageSize(displacement_map);
+
+	if(pos.x < size.x && pos.y < size.y)
+	{
+		vec4 value = imageLoad(displacement_map, pos);
+		uint buffer_index = (pos.x * resolution) + pos.y;
+		height_values[buffer_index] = value.y;
+	}
+}

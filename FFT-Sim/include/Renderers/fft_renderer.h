@@ -28,10 +28,12 @@ struct HeightSimParams {
 	float wind_magnitude = 5.142135f;
 	int sun_elevation = 0.f;
 	int sun_azimuth = 90.f;
+	float time_value = 1.0f;
 	bool wireframe;
 	bool changed = true;
 	bool is_ping_phase = true;
 	bool use_temp_texture = true;
+	bool save_height_values = false;
 };
 
 struct FFTParams {
@@ -83,6 +85,8 @@ struct OceanSurface {
 	AllocatedImage height_map;
 	AllocatedImage displacement_map;
 	AllocatedImage sky_image;
+	AllocatedBuffer height_buffer;
+	AllocatedBuffer sampled_value;
 };
 struct FFTRenderer : public BaseRenderer
 {
@@ -99,13 +103,11 @@ struct FFTRenderer : public BaseRenderer
 	void InitImgui() override;
 
 	void DrawMain(VkCommandBuffer cmd);
-	void DrawBackground(VkCommandBuffer cmd);
-	void DrawPostProcess(VkCommandBuffer cmd);
 	void DrawImgui(VkCommandBuffer cmd, VkImageView targetImageView);
 	void BuildOceanMesh();
 	void DrawOceanMesh(VkCommandBuffer cmd);
 	void GenerateInitialSpectrum(VkCommandBuffer cmd);
-	void GenerateSpectrum(VkCommandBuffer cmd);
+	void GenerateSpectrum(VkCommandBuffer cmd, float time = -1.0);
 	void DebugComputePass(VkCommandBuffer cmd);
 	void PreProcessComputePass();
 	void WrapSpectrum(VkCommandBuffer cmd);
@@ -122,6 +124,7 @@ struct FFTRenderer : public BaseRenderer
 	void InitDescriptors();
 	void InitBuffers();
 	void InitPipelines();
+	float GetHeightValues(const double x, const double y, const double t);
 
 	void CreateSwapchain(uint32_t width, uint32_t height);
 	void DestroySwapchain();
@@ -144,6 +147,8 @@ private:
 	VkDescriptorSetLayout debug_layout;
 	VkDescriptorSetLayout wrap_spectrum_layout;
 	VkDescriptorSetLayout fft_layout;
+	VkDescriptorSetLayout height_copy_layout;
+	VkDescriptorSetLayout height_sample_layout;
 	std::vector<VkImageMemoryBarrier> image_barriers;
 	
 	Camera main_camera;
@@ -166,6 +171,7 @@ private:
 	BlackKey::FrameData _frames[FRAME_OVERLAP];
 	BlackKey::FrameData& get_current_frame() { return _frames[_frameNumber % FRAME_OVERLAP]; };
 
+	std::vector<float> height_values;
 	bool resize_requested = false;
 	bool _isInitialized{ false };
 	int _frameNumber{ 0 };
@@ -174,6 +180,8 @@ private:
 	bool debugBuffer = false;
 	bool readDebugBuffer = false;
 	bool debug_texture = false;
+	bool first_check = true;
+	float last_t = -1.0f;
 
 	struct {
 		float lastFrame;
@@ -213,6 +221,8 @@ private:
 	PipelineStateObject copy_pso;
 	PipelineStateObject permute_scale_pso;
 	PipelineStateObject butterfly_pso;
+	PipelineStateObject copy_buffer_pso;
+	PipelineStateObject lookup_value_pso;
 	GPUSceneData scene_data;
 
 	

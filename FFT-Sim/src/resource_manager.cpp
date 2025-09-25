@@ -209,9 +209,9 @@ AllocatedBuffer ResourceManager::CreateBuffer(size_t allocSize, VkBufferUsageFla
     VK_CHECK(vmaCreateBuffer(engine->_allocator, &bufferInfo, &vmaallocInfo, &newBuffer.buffer, &newBuffer.allocation,
         &newBuffer.info));
 
-    deletionQueue.push_function([=]() {
-        DestroyBuffer(newBuffer);
-      });
+   // deletionQueue.push_function([=]() {
+       // DestroyBuffer(newBuffer);
+     // });
     return newBuffer;
 }
 
@@ -237,9 +237,9 @@ AllocatedBuffer ResourceManager::CreateAndUpload(size_t allocSize, VkBufferUsage
     vmaUnmapMemory(engine->_allocator, stagingBuffer.allocation);
     DestroyBuffer(stagingBuffer);
 
-    deletionQueue.push_function([=]() {
-        DestroyBuffer(dataBuffer);
-        });
+    //deletionQueue.push_function([=]() {
+      //  DestroyBuffer(dataBuffer);
+        //});
 
     return dataBuffer;
 }
@@ -333,9 +333,9 @@ AllocatedImage ResourceManager::CreateImage(VkExtent3D size, VkFormat format, Vk
 
     VK_CHECK(vkCreateImageView(engine->_device, &view_info, nullptr, &newImage.imageView));
 
-    deletionQueue.push_function([=]() {
-        DestroyImage(newImage);
-        });
+   // deletionQueue.push_function([=]() {
+     //   DestroyImage(newImage);
+       // });
     return newImage;
 }
 
