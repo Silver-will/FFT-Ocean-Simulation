@@ -353,6 +353,6 @@ AllocatedImage vkutil::load_cubemap_image(std::string_view path, VulkanEngine* e
                     VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);
             }
         });
-
+    destroy_buffer(image_buffer,engine);
     return cube_image;
 }

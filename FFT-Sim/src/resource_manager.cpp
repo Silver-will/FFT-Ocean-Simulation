@@ -143,7 +143,15 @@ ResourceManager::ResourceManager(VulkanEngine* engine)
     sampl.minFilter = VK_FILTER_LINEAR;
     vkCreateSampler(engine->_device, &sampl, nullptr, &defaultSamplerLinear);
 
-
+    deletionQueue.push_function([=]() {
+        vkDestroySampler(engine->_device, defaultSamplerLinear, nullptr);
+        vkDestroySampler(engine->_device, defaultSamplerNearest, nullptr);
+        DestroyImage(errorCheckerboardImage);
+        DestroyImage(_whiteImage);
+        DestroyImage(_blackImage);
+        DestroyImage(_greyImage);
+        DestroyImage(storageImage);
+        });
 }
 void ResourceManager::cleanup()
 {
@@ -184,7 +192,7 @@ void ResourceManager::ReadBackBufferData(VkCommandBuffer cmd, AllocatedBuffer* b
         DestroyBuffer(readableBuffer);
     }
 
-    readableBuffer =  CreateBuffer(buffer->info.size, VK_BUFFER_USAGE_TRANSFER_DST_BIT, VMA_MEMORY_USAGE_CPU_ONLY);
+    readableBuffer =  CreateBuffer(buffer->info.size, VK_BUFFER_USAGE_TRANSFER_DST_BIT, VMA_MEMORY_USAGE_CPU_ONLY, "Debug readback buffer");
     readBackBufferInitialized = true;
 
     VkBufferCopy dataCopy{ 0 };
@@ -202,7 +210,7 @@ AllocatedBuffer* ResourceManager::GetReadBackBuffer()
 }
 
 
-AllocatedBuffer ResourceManager::CreateBuffer(size_t allocSize, VkBufferUsageFlags usage, VmaMemoryUsage memoryUsage)
+AllocatedBuffer ResourceManager::CreateBuffer(size_t allocSize, VkBufferUsageFlags usage, VmaMemoryUsage memoryUsage, std::string alloc_name)
 {
     // allocate buffer
     VkBufferCreateInfo bufferInfo{};
@@ -222,13 +230,12 @@ AllocatedBuffer ResourceManager::CreateBuffer(size_t allocSize, VkBufferUsageFla
     VK_CHECK(vmaCreateBuffer(engine->_allocator, &bufferInfo, &vmaallocInfo, &newBuffer.buffer, &newBuffer.allocation,
         &newBuffer.info));
 
-   // deletionQueue.push_function([=]() {
-       // DestroyBuffer(newBuffer);
-     // });
+    vmaSetAllocationName(engine->_allocator, newBuffer.allocation, alloc_name.c_str());
+
     return newBuffer;
 }
 
-AllocatedBuffer ResourceManager::CreateAndUpload(size_t allocSize, VkBufferUsageFlags usage, VmaMemoryUsage memoryUsage, void* data)
+AllocatedBuffer ResourceManager::CreateAndUpload(size_t allocSize, VkBufferUsageFlags usage, VmaMemoryUsage memoryUsage, void* data, std::string alloc_name)
 {
     AllocatedBuffer stagingBuffer = CreateBuffer(allocSize, VK_BUFFER_USAGE_TRANSFER_SRC_BIT, VMA_MEMORY_USAGE_CPU_ONLY);
 
@@ -253,6 +260,7 @@ AllocatedBuffer ResourceManager::CreateAndUpload(size_t allocSize, VkBufferUsage
     //deletionQueue.push_function([=]() {
       //  DestroyBuffer(dataBuffer);
         //});
+    vmaSetAllocationName(engine->_allocator, dataBuffer.allocation, alloc_name.c_str());
 
     return dataBuffer;
 }
@@ -314,7 +322,7 @@ GPUMeshBuffers ResourceManager::UploadMesh(std::vector<uint32_t> indices, std::v
 
 }
 
-AllocatedImage ResourceManager::CreateImage(VkExtent3D size, VkFormat format, VkImageUsageFlags usage, bool mipmapped)
+AllocatedImage ResourceManager::CreateImage(VkExtent3D size, VkFormat format, VkImageUsageFlags usage, bool mipmapped, std::string alloc_name)
 {
     AllocatedImage newImage;
     newImage.imageFormat = format;
@@ -346,9 +354,7 @@ AllocatedImage ResourceManager::CreateImage(VkExtent3D size, VkFormat format, Vk
 
     VK_CHECK(vkCreateImageView(engine->_device, &view_info, nullptr, &newImage.imageView));
 
-   // deletionQueue.push_function([=]() {
-     //   DestroyImage(newImage);
-       // });
+    vmaSetAllocationName(engine->_allocator, newImage.allocation, alloc_name.c_str());
     return newImage;
 }
 
@@ -389,7 +395,7 @@ AllocatedImage ResourceManager::CreateImageEmpty(VkExtent3D size, VkFormat forma
 }
 
 
-AllocatedImage ResourceManager::CreateImage(void* data, VkExtent3D size, VkFormat format, VkImageUsageFlags usage,uint32_t byte_size, bool mipmapped)
+AllocatedImage ResourceManager::CreateImage(void* data, VkExtent3D size, VkFormat format, VkImageUsageFlags usage,uint32_t byte_size, bool mipmapped, std::string alloc_name)
 {
     //Always assumes the texture is 4 components large
     size_t data_size = size.depth * size.width * size.height * byte_size;
@@ -435,6 +441,8 @@ AllocatedImage ResourceManager::CreateImage(void* data, VkExtent3D size, VkForma
         }
         });
     DestroyBuffer(uploadbuffer);
+    vmaSetAllocationName(engine->_allocator, new_image.allocation, alloc_name.c_str());
+
     return new_image;
 }
 

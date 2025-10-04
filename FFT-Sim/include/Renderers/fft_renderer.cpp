@@ -139,7 +139,7 @@ void FFTRenderer::Init(VulkanEngine* engine)
 
 	InitDefaultData();
 
-	InitBuffers();
+	//InitBuffers();
 
 	InitPipelines();
 
@@ -598,39 +598,15 @@ void FFTRenderer::BuildOceanMesh()
 		*/
 		}
 	}
-	/*
-	for (unsigned int y = 0; y < GRID_DIM - 1; ++y)
-	{
-		for (unsigned int x = 0; x < GRID_DIM; ++x)
-		{
-			for (unsigned int k = 0; k < 2; ++k)
-			{
-				surface.indices.push_back(x * GRID_DIM * (y + k * 1));
-			}
-			uint32_t v0 = y * GRID_DIM + x;
-			uint32_t v1 = y * GRID_DIM + (x + 1);
-			uint32_t v2 = (y + 1) * GRID_DIM + x;
-			uint32_t v3 = (y + 1) * GRID_DIM + (x + 1);
-
-			surface.indices.push_back(v0);
-			surface.indices.push_back(v1);
-			surface.indices.push_back(v2);
-
-			surface.indices.push_back(v1);
-			surface.indices.push_back(v2);
-			surface.indices.push_back(v3);
-		}
-	}
-	*/
-	//Voxel texture visualization buffer
+	
 	size_t buffer_size = surface.vertices.size() * sizeof(OceanVertex);
 	const size_t indexBufferSize = surface.indices.size() * sizeof(uint32_t);
 	
 	surface.mesh_data.vertexBuffer = resource_manager->CreateBuffer(buffer_size, VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_TRANSFER_SRC_BIT | VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT,
-		VMA_MEMORY_USAGE_GPU_ONLY);
+		VMA_MEMORY_USAGE_GPU_ONLY, "Vertex data buffer");
 
 	surface.mesh_data.indexBuffer = resource_manager->CreateBuffer(indexBufferSize, VK_BUFFER_USAGE_INDEX_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_SRC_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT,
-		VMA_MEMORY_USAGE_GPU_ONLY);
+		VMA_MEMORY_USAGE_GPU_ONLY, "index data buffer");
 
 	VkBufferDeviceAddressInfo deviceAdressInfo{};
 	deviceAdressInfo.sType = VK_STRUCTURE_TYPE_BUFFER_DEVICE_ADDRESS_INFO;
@@ -1009,29 +985,29 @@ void FFTRenderer::InitDefaultData()
 	logExtent.width = log_size;
 
 	//stbi_load(std::string(assets_path + "textures/back.png"))
-	surface.displacement_map = resource_manager->CreateImage(oceanExtent, VK_FORMAT_R32G32B32A32_SFLOAT, VK_IMAGE_USAGE_SAMPLED_BIT | VK_IMAGE_USAGE_STORAGE_BIT);
-	surface.inital_spectrum_texture = resource_manager->CreateImage(oceanExtent, VK_FORMAT_R32G32_SFLOAT, VK_IMAGE_USAGE_SAMPLED_BIT | VK_IMAGE_USAGE_STORAGE_BIT);
-	surface.horizontal_map = resource_manager->CreateImage(oceanExtent, VK_FORMAT_R32G32B32A32_SFLOAT, VK_IMAGE_USAGE_SAMPLED_BIT | VK_IMAGE_USAGE_STORAGE_BIT);
-	surface.wave_texture = resource_manager->CreateImage(oceanExtent, VK_FORMAT_R32G32B32A32_SFLOAT, VK_IMAGE_USAGE_SAMPLED_BIT | VK_IMAGE_USAGE_STORAGE_BIT);
-	surface.conjugated_spectrum_texture = resource_manager->CreateImage(oceanExtent, VK_FORMAT_R32G32B32A32_SFLOAT, VK_IMAGE_USAGE_SAMPLED_BIT | VK_IMAGE_USAGE_STORAGE_BIT);
-	surface.height_map = resource_manager->CreateImage(oceanExtent, VK_FORMAT_R32G32B32A32_SFLOAT, VK_IMAGE_USAGE_SAMPLED_BIT | VK_IMAGE_USAGE_STORAGE_BIT);
-	surface.butterfly_texture = resource_manager->CreateImage(logExtent, VK_FORMAT_R32G32B32A32_SFLOAT, VK_IMAGE_USAGE_SAMPLED_BIT | VK_IMAGE_USAGE_STORAGE_BIT);
+	surface.displacement_map = resource_manager->CreateImage(oceanExtent, VK_FORMAT_R32G32B32A32_SFLOAT, VK_IMAGE_USAGE_SAMPLED_BIT | VK_IMAGE_USAGE_STORAGE_BIT, false, "Displacement map");
+	surface.inital_spectrum_texture = resource_manager->CreateImage(oceanExtent, VK_FORMAT_R32G32_SFLOAT, VK_IMAGE_USAGE_SAMPLED_BIT | VK_IMAGE_USAGE_STORAGE_BIT, false, "initial spectrum");
+	surface.horizontal_map = resource_manager->CreateImage(oceanExtent, VK_FORMAT_R32G32B32A32_SFLOAT, VK_IMAGE_USAGE_SAMPLED_BIT | VK_IMAGE_USAGE_STORAGE_BIT, false, "horizontal map");
+	surface.wave_texture = resource_manager->CreateImage(oceanExtent, VK_FORMAT_R32G32B32A32_SFLOAT, VK_IMAGE_USAGE_SAMPLED_BIT | VK_IMAGE_USAGE_STORAGE_BIT, false, "wave texture");
+	surface.conjugated_spectrum_texture = resource_manager->CreateImage(oceanExtent, VK_FORMAT_R32G32B32A32_SFLOAT, VK_IMAGE_USAGE_SAMPLED_BIT | VK_IMAGE_USAGE_STORAGE_BIT, false, "conjugated spectrum");
+	surface.height_map = resource_manager->CreateImage(oceanExtent, VK_FORMAT_R32G32B32A32_SFLOAT, VK_IMAGE_USAGE_SAMPLED_BIT | VK_IMAGE_USAGE_STORAGE_BIT,false, "height map");
+	surface.butterfly_texture = resource_manager->CreateImage(logExtent, VK_FORMAT_R32G32B32A32_SFLOAT, VK_IMAGE_USAGE_SAMPLED_BIT | VK_IMAGE_USAGE_STORAGE_BIT,false, "butterfly texture");
 	surface.gaussian_noise_texture = resource_manager->CreateImage(gaussian_noise.data(), oceanExtent, VK_FORMAT_R32G32_SFLOAT, VK_IMAGE_USAGE_SAMPLED_BIT | VK_IMAGE_USAGE_STORAGE_BIT, 8);
-	surface.height_derivative = resource_manager->CreateImage(oceanExtent, VK_FORMAT_R32G32B32A32_SFLOAT, VK_IMAGE_USAGE_SAMPLED_BIT | VK_IMAGE_USAGE_STORAGE_BIT);
-	surface.ping_1 = resource_manager->CreateImage(oceanExtent, VK_FORMAT_R32G32B32A32_SFLOAT, VK_IMAGE_USAGE_SAMPLED_BIT | VK_IMAGE_USAGE_STORAGE_BIT);
-	surface.normal_map = resource_manager->CreateImage(oceanExtent, VK_FORMAT_R32G32B32A32_SFLOAT, VK_IMAGE_USAGE_SAMPLED_BIT | VK_IMAGE_USAGE_STORAGE_BIT);
-	surface.frequency_domain_texture = resource_manager->CreateImage(oceanExtent, VK_FORMAT_R32G32B32A32_SFLOAT, VK_IMAGE_USAGE_SAMPLED_BIT | VK_IMAGE_USAGE_STORAGE_BIT);
-	surface.horizontal_displacement_map = resource_manager->CreateImage(oceanExtent, VK_FORMAT_R32G32B32A32_SFLOAT, VK_IMAGE_USAGE_SAMPLED_BIT | VK_IMAGE_USAGE_STORAGE_BIT);
-	surface.height_derivative_texture = resource_manager->CreateImage(oceanExtent, VK_FORMAT_R32G32B32A32_SFLOAT, VK_IMAGE_USAGE_SAMPLED_BIT | VK_IMAGE_USAGE_STORAGE_BIT);
-	surface.jacobian_XxZz_map = resource_manager->CreateImage(oceanExtent, VK_FORMAT_R32G32B32A32_SFLOAT, VK_IMAGE_USAGE_SAMPLED_BIT | VK_IMAGE_USAGE_STORAGE_BIT);
-	surface.jacobian_xz_map = resource_manager->CreateImage(oceanExtent, VK_FORMAT_R32G32_SFLOAT, VK_IMAGE_USAGE_SAMPLED_BIT | VK_IMAGE_USAGE_STORAGE_BIT);
+	surface.height_derivative = resource_manager->CreateImage(oceanExtent, VK_FORMAT_R32G32B32A32_SFLOAT, VK_IMAGE_USAGE_SAMPLED_BIT | VK_IMAGE_USAGE_STORAGE_BIT, false, "height derivative permute");
+	surface.ping_1 = resource_manager->CreateImage(oceanExtent, VK_FORMAT_R32G32B32A32_SFLOAT, VK_IMAGE_USAGE_SAMPLED_BIT | VK_IMAGE_USAGE_STORAGE_BIT, false, "ping_1");
+	surface.normal_map = resource_manager->CreateImage(oceanExtent, VK_FORMAT_R32G32B32A32_SFLOAT, VK_IMAGE_USAGE_SAMPLED_BIT | VK_IMAGE_USAGE_STORAGE_BIT, false, "normal map");
+	surface.frequency_domain_texture = resource_manager->CreateImage(oceanExtent, VK_FORMAT_R32G32B32A32_SFLOAT, VK_IMAGE_USAGE_SAMPLED_BIT | VK_IMAGE_USAGE_STORAGE_BIT, false, "frequency texture");
+	surface.horizontal_displacement_map = resource_manager->CreateImage(oceanExtent, VK_FORMAT_R32G32B32A32_SFLOAT, VK_IMAGE_USAGE_SAMPLED_BIT | VK_IMAGE_USAGE_STORAGE_BIT, false, "horizontal displacement");
+	surface.height_derivative_texture = resource_manager->CreateImage(oceanExtent, VK_FORMAT_R32G32B32A32_SFLOAT, VK_IMAGE_USAGE_SAMPLED_BIT | VK_IMAGE_USAGE_STORAGE_BIT, false, "height derivative");
+	surface.jacobian_XxZz_map = resource_manager->CreateImage(oceanExtent, VK_FORMAT_R32G32B32A32_SFLOAT, VK_IMAGE_USAGE_SAMPLED_BIT | VK_IMAGE_USAGE_STORAGE_BIT, false, "jacobian XxzZ");
+	surface.jacobian_xz_map = resource_manager->CreateImage(oceanExtent, VK_FORMAT_R32G32_SFLOAT, VK_IMAGE_USAGE_SAMPLED_BIT | VK_IMAGE_USAGE_STORAGE_BIT, false, "jacobian xz");
 	std::string cubemap_path(assets_path + "/textures/");
 	surface.sky_image = vkutil::load_cubemap_image(cubemap_path,engine, VK_FORMAT_R8G8B8A8_UNORM, VK_IMAGE_USAGE_SAMPLED_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT |VK_IMAGE_USAGE_SAMPLED_BIT,true );
 	ocean_params.log_size = log2(RES);
 	//Create default images
 	size_t height_buffer_size = RES * RES * sizeof(float);
-	surface.height_buffer = resource_manager->CreateBuffer(height_buffer_size,VK_BUFFER_USAGE_STORAGE_BUFFER_BIT,VMA_MEMORY_USAGE_GPU_TO_CPU);
-	surface.sampled_value = resource_manager->CreateBuffer(sizeof(float), VK_BUFFER_USAGE_STORAGE_BUFFER_BIT, VMA_MEMORY_USAGE_GPU_TO_CPU);
+	surface.height_buffer = resource_manager->CreateBuffer(height_buffer_size,VK_BUFFER_USAGE_STORAGE_BUFFER_BIT,VMA_MEMORY_USAGE_GPU_TO_CPU, "height buffer");
+	surface.sampled_value = resource_manager->CreateBuffer(sizeof(float), VK_BUFFER_USAGE_STORAGE_BUFFER_BIT, VMA_MEMORY_USAGE_GPU_TO_CPU, "sampled buffer");
 	uint32_t black = glm::packUnorm4x8(glm::vec4(0, 0, 0, 0));
 	
 
