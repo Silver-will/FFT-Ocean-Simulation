@@ -328,6 +328,12 @@ void FFTRenderer::InitCommands()
 		VK_CHECK(vkAllocateCommandBuffers(engine->_device, &cmdAllocInfo, &_frames[i]._mainCommandBuffer));
 
 		resource_manager->deletionQueue.push_function([=]() { vkDestroyCommandPool(engine->_device, _frames[i]._commandPool, nullptr); });
+
+
+		resource_manager->deletionQueue.push_function([=]() {
+			//vkFreeCommandBuffers(engine->_device, _frames[i]._commandPool, 1, &_frames[i]._mainCommandBuffer);
+			//vkDestroyCommandPool(engine->_device, _frames[i]._commandPool, nullptr);
+			});
 	}
 
 
@@ -461,6 +467,10 @@ void FFTRenderer::InitDescriptors()
 		vkDestroyDescriptorSetLayout(engine->_device, skybox_descriptor_layout, nullptr);
 		vkDestroyDescriptorSetLayout(engine->_device, resource_manager->bindless_descriptor_layout, nullptr);
 		vkDestroyDescriptorSetLayout(engine->_device, debug_layout, nullptr);
+		vkDestroyDescriptorSetLayout(engine->_device, height_sample_layout, nullptr);
+		vkDestroyDescriptorSetLayout(engine->_device, height_copy_layout, nullptr);
+		vkDestroyDescriptorSetLayout(engine->_device, fft_layout, nullptr);
+		vkDestroyDescriptorSetLayout(engine->_device, wrap_spectrum_layout, nullptr);
 		});
 
 	for (int i = 0; i < FRAME_OVERLAP; i++) {
@@ -656,6 +666,10 @@ void FFTRenderer::InitPipelines()
 	info.depthFormat = _depthImage.imageFormat;
 	fft_pipeline.build_pipelines(engine, info);
 	InitComputePipelines();
+
+	_mainDeletionQueue.push_function([=]() {
+		fft_pipeline.clear_resources(engine->_device);
+		});
 }
 
 
@@ -933,6 +947,20 @@ void FFTRenderer::InitComputePipelines()
 		resource_manager->DestroyPSO(lookup_value_pso);
 		resource_manager->DestroyPSO(permute_scale_pso);
 		resource_manager->DestroyPSO(wrap_spectrum_pso);
+		vkDestroyShaderModule(engine->_device, spectrum_shader, nullptr);
+		vkDestroyShaderModule(engine->_device, butterfly_shader, nullptr);
+		vkDestroyShaderModule(engine->_device, phase_shader, nullptr);
+		vkDestroyShaderModule(engine->_device, conjugate_spectrum_shader, nullptr);
+		vkDestroyShaderModule(engine->_device, copy_buffer_shader, nullptr);
+		vkDestroyShaderModule(engine->_device, copy_shader, nullptr);
+		vkDestroyShaderModule(engine->_device, fft_horizontal_shader, nullptr);
+		vkDestroyShaderModule(engine->_device, fft_vertical_shader, nullptr);
+		vkDestroyShaderModule(engine->_device, debug_shader, nullptr);
+		vkDestroyShaderModule(engine->_device, initial_spectrum_shader, nullptr);
+		vkDestroyShaderModule(engine->_device, normal_shader, nullptr);
+		vkDestroyShaderModule(engine->_device, permute_shader, nullptr);
+		vkDestroyShaderModule(engine->_device, wrap_spectrum_shader, nullptr);
+		vkDestroyShaderModule(engine->_device, lookup_shader, nullptr);
 		});
 }
 

@@ -171,6 +171,9 @@ void VulkanEngine::cleanup()
 		// make sure the gpu has stopped doing its things
 		vkDeviceWaitIdle(_device);
 
+		vkFreeCommandBuffers(_device, _immCommandPool, 1, &_immCommandBuffer);
+		vkDestroyCommandPool(_device, _immCommandPool,nullptr);
+		vkDestroyFence(_device, _immFence, nullptr);
 		vkDestroySurfaceKHR(_instance, _surface, nullptr);
 		vmaDestroyAllocator(_allocator);
 
