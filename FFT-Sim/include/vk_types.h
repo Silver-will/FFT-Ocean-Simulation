@@ -1,7 +1,4 @@
-﻿// vulkan_guide.h : Include file for standard system include files,
-// or project specific include files.
-#pragma once
-
+﻿﻿#pragma once
 #define GLFW_INCLUDE_VULKAN
 #include<GLFW/glfw3.h>
 
@@ -10,16 +7,15 @@
 #include <optional>
 #include <string>
 #include <vector>
-#include <span>
 #include <array>
 #include <functional>
 #include <deque>
 #include <string_view>
+#include <iostream>
 
 #include <vulkan/vulkan.h>
 #include <vulkan/vk_enum_string_helper.h>
-#include <vma/vk_mem_alloc.h>
-#include <print>
+#include <vk_mem_alloc.h>
 
 #define GLM_FORCE_DEPTH_ZERO_TO_ONE
 #define GLM_FORCE_RADIANS
@@ -28,13 +24,12 @@
 #include <glm/vec4.hpp>
 #include <glm/gtx/transform.hpp>
 
-namespace vkutil{
-    enum class MaterialPass{
+namespace vkutil {
+    enum class MaterialPass {
         transparency,
         forward,
         early_depth,
-        shadow_pass,
-        voxel_gi
+        shadow_pass
     };
 
     struct cullParams {
@@ -149,7 +144,6 @@ struct PipelineCreationInfo {
     std::vector<VkDescriptorSetLayout> layouts;
     VkFormat depthFormat = VK_FORMAT_MAX_ENUM;
     VkFormat imageFormat = VK_FORMAT_MAX_ENUM;
-    VkSampleCountFlagBits msaa_samples = VK_SAMPLE_COUNT_1_BIT;
 };
 
 struct clusterParams {
@@ -159,6 +153,10 @@ struct clusterParams {
 struct LightGrid {
     uint32_t offset;
     uint32_t count;
+};
+
+struct TraceParams {
+    glm::vec4 test;
 };
 
 struct CullData {
@@ -225,35 +223,11 @@ struct GPUSceneData {
     uint32_t lightCount;
     glm::vec4 distances;
     glm::vec4 debugValues; //x for light clusters
-  };
-
-struct VXGIData
-{
-    float indirectDiffuseIntensity{ 15.0f };
-    float indirectSpecularIntensity{2.0f};
-    float voxel_resolution; // This is updated per frame from the voxelizer
-    float ambientOcclusionFactor{0.24456};
-    float traceStartOffset{ 1.535f };
-    float voxel_size = 0.25f;
-    float step_factor = 2.0f;
-    float volumeCenter;
-    glm::vec4 region_min = glm::vec4(-15,-15,-15,1);
-    glm::vec4 region_max = glm::vec4(15,15,15,1);
-};
-
-struct Texture3DVisualizationData{
-    glm::mat4 viewproj;
-    glm::vec3 resolution;
-    float texel_size{0.5f};
-    glm::vec3 position = glm::vec3(-4,-40,-8.0f);
-    float padding{0.01f};
-    glm::vec3 border_color;
-    float border_alpha;
 };
 
 struct shadowData {
     glm::mat4 lightSpaceMatrices[4];
-   // glm::vec4 distances;
+    // glm::vec4 distances;
 };
 
 struct GPUDrawBindlessPushConstants {
@@ -267,12 +241,6 @@ struct GPUDrawPushConstants {
     glm::mat4 worldMatrix;
     VkDeviceAddress vertexBuffer;
     uint32_t material_index;
-};
-
-struct VoxelizationPushConstants {
-    glm::vec4 min_bounding_box;
-    glm::vec4 max_bounding_box;
-    VkDeviceAddress vertexBuffer;
 };
 
 union BloomFloatRad {
@@ -333,7 +301,7 @@ struct EngineStats {
     do {                                                                \
         VkResult err = x;                                               \
         if (err) {                                                      \
-            std::println("Detected Vulkan error: {}", string_VkResult(err)); \
+            std::cout<<"Detected Vulkan error: " << string_VkResult(err); \
             abort();                                                    \
         }                                                               \
     } while (0)
